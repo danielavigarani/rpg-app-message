@@ -8,10 +8,40 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0">
     <link rel="stylesheet" href="style.css?v=3.1">
 </head>
 <body class="bg-black h-screen w-screen flex items-center justify-center overflow-hidden font-sans">
+
+    <!-- TELA DE SELEÇÃO DE PERFIL (FASE 5) -->
+    <div id="profile-selection-screen" class="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-500">
+        
+        <h1 class="font-['Caveat'] text-5xl md:text-7xl text-white mb-12 tracking-widest animate-pulse">Quem é você hoje?</h1>
+        
+        <div class="flex flex-col md:flex-row gap-8 md:gap-16">
+            
+            <!-- Opção Player (Max) -->
+            <div onclick="selectPersona('player')" class="profile-card group cursor-pointer flex flex-col items-center gap-4 transition-transform hover:scale-105">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-transparent group-hover:border-[#f2b378] overflow-hidden transition-all shadow-2xl relative">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-[#f2b378]/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </div>
+                <span class="text-2xl text-gray-400 group-hover:text-[#f2b378] font-bold tracking-wide transition-colors">MAX (Eu)</span>
+            </div>
+
+            <div class="h-px w-full md:w-px md:h-48 bg-gray-800 self-center"></div>
+
+            <!-- Opção Mestre (NPCs) -->
+            <div onclick="selectPersona('gm')" class="profile-card group cursor-pointer flex flex-col items-center gap-4 transition-transform hover:scale-105">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-transparent group-hover:border-[#a855f7] overflow-hidden transition-all shadow-2xl relative bg-gray-900 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-6xl text-gray-600 group-hover:text-[#a855f7] transition-colors">diversity_3</span>
+                </div>
+                <span class="text-2xl text-gray-400 group-hover:text-[#a855f7] font-bold tracking-wide transition-colors">MESTRE (NPCs)</span>
+            </div>
+
+        </div>
+    </div>
 
     <div class="app-container w-full h-full md:h-[95vh] md:w-[95vw] md:max-w-[1600px] md:rounded-xl overflow-hidden flex shadow-2xl relative transition-colors duration-300">
 
@@ -20,9 +50,10 @@
             <div class="h-16 flex items-center justify-between px-4 border-b border-gray-500/10 shrink-0">
                 <div class="flex items-center gap-2">
                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" class="w-10 h-10 rounded-full bg-gray-300 border border-gray-500/20">
-                    <span class="font-bold tracking-wide" style="color: var(--primary-accent)">My RPG Log</span>
+                    <span class="font-bold tracking-wide" style="color: var(--primary-accent)">Lacres</span>
                 </div>
                 <div class="flex gap-2 text-[var(--text-secondary)]">
+                    <button id="logout-btn" title="Trocar Perfil" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition text-red-400">logout</button>
                     <button id="theme-toggle" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition">dark_mode</button>
                 </div>
             </div>
@@ -31,15 +62,15 @@
                 </div>
         </div>
 
-        <div id="chat-area" class="flex-1 flex flex-col h-full relative w-full absolute inset-0 md:relative translate-x-full md:translate-x-0 transition-transform duration-300 z-20 bg-[var(--app-bg)]">
+        <div id="chat-area" class="relative flex-1 h-full w-full absolute inset-0 md:relative translate-x-full md:translate-x-0 transition-transform duration-300 z-20 bg-[var(--app-bg)]">
             
-            <div id="empty-state" class="hidden md:flex flex-col items-center justify-center h-full text-center p-10">
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
                 <span class="material-symbols-outlined text-6xl mb-4" style="color: var(--primary-accent)">auto_stories</span>
                 <h2 class="text-xl font-bold mb-2">Selecione uma história</h2>
                 <p style="color: var(--text-secondary)">Life is Strange RPG Messenger</p>
             </div>
 
-            <div id="chat-content" class="hidden h-full w-full bg-[var(--app-bg)]">
+            <div id="chat-content" class="hidden flex-col h-full w-full relative z-10 bg-[var(--app-bg)]">
                 
                 <div class="h-16 flex items-center justify-between px-4 border-b border-gray-500/10 shrink-0 shadow-sm z-10 bg-[var(--app-bg)]">
                     <div class="flex items-center gap-3">
@@ -52,14 +83,13 @@
                     </div>
                 </div>
 
-                <div id="message-container" class="flex-1 p-4 overflow-y-auto message-scroll flex flex-col gap-3">
+                <div id="message-container" class="flex-1 w-full p-4 overflow-y-auto message-scroll flex flex-col gap-3">
                     </div>
 
                 <div class="px-4 py-3 shrink-0 z-20 border-t border-gray-500/10 bg-[var(--sidebar-bg)]">
                     <div class="flex items-end gap-2 bg-[var(--app-bg)] p-2 rounded-2xl border border-gray-500/10 shadow-sm">
                         
                         <div class="relative group shrink-0 pb-0.5">
-                            <select id="char-select" class="absolute inset-0 w-10 h-10 opacity-0 cursor-pointer z-20"></select>
                             <img id="current-char-avatar" src="" class="w-9 h-9 rounded-full object-cover ring-2 ring-transparent group-hover:ring-[var(--primary-accent)] transition-all bg-gray-300">
                         </div>
 

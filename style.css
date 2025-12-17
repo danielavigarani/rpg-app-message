@@ -2,39 +2,37 @@
 
 /* --- PALETA LIFE IS STRANGE --- */
 :root {
-    /* Light Mode (Morning Arcadia) */
+    /* Light Mode */
     --app-bg: #fbf5f1;              
     --sidebar-bg: #f3eae4;          
     --border-color: #e6dace;
-    
     --text-primary: #0b0805;
     --text-secondary: #5d554f;
 
     /* Balões */
     --bubble-npc-bg: #ffffff;
-    --bubble-npc-text: #0b0805;
+    --bubble-npc-text: #000000; /* Preto absoluto para leitura */
     
     --bubble-player-bg: #f2b378;    
-    --bubble-player-text: #0b0805;
+    --bubble-player-text: #000000; /* Preto no Laranja */
     
     --primary-accent: #945d29;      
 }
 
 body.dark-theme {
-    /* Dark Mode (Dark Room) */
+    /* Dark Mode */
     --app-bg: #0d0607;              
     --sidebar-bg: #140a0b;
     --border-color: #2b1517;
-
     --text-primary: #eae3e4;
     --text-secondary: #9f8c8e;
 
     /* Balões */
     --bubble-npc-bg: #1f1f1f;       
-    --bubble-npc-text: #eae3e4;
+    --bubble-npc-text: #ffffff; /* Branco no Cinza Escuro */
     
     --bubble-player-bg: #951526;    
-    --bubble-player-text: #eae3e4;
+    --bubble-player-text: #ffffff; /* Branco no Vermelho */
     
     --primary-accent: #ffb6c0;
 }
@@ -64,6 +62,10 @@ textarea, input {
 textarea::placeholder {
     color: var(--text-secondary);
 }
+textarea:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
 
 /* Lista de Chats */
 .chat-item:hover {
@@ -79,22 +81,33 @@ body.dark-theme .chat-item:hover {
 }
 
 /* --- CORREÇÃO DE LAYOUT DO CHAT --- */
-/* Garante que o conteúdo do chat ocupe a altura total disponível */
-#chat-content {
-    height: 100%;
-    overflow: hidden; /* Impede que o container vaze */
-}
-
-/* Área de mensagens deve crescer e rolar */
-#message-container {
-    flex: 1; /* Ocupa todo o espaço restante */
-    overflow-y: auto; /* Permite rolagem */
-    min-height: 0; /* CRUCIAL para flexbox aninhado */
+/* Garante que o chat area ocupe o espaço restante da tela */
+#chat-area {
     display: flex;
     flex-direction: column;
-    gap: 12px; /* Espaço entre mensagens */
-    padding: 16px;
-    scroll-behavior: smooth;
+    height: 100%;
+    width: 100%;
+    position: relative;
+}
+
+/* Garante que o conteúdo do chat ocupe a altura total disponível */
+#chat-content {
+    display: none; /* Padrão escondido */
+    flex-direction: column; /* Sempre coluna quando visível */
+    height: 100%;
+    width: 100%;
+}
+
+/* Quando tiver a classe .flex via JS, ele assume flexbox */
+#chat-content.flex {
+    display: flex !important;
+}
+
+/* Garante que as mensagens tenham espaço para rolar */
+#message-container {
+    flex-grow: 1;
+    min-height: 0; /* CRUCIAL para flexbox aninhado */
+    width: 100%;
 }
 
 /* --- ESTILO DOS BALÕES --- */
@@ -102,7 +115,7 @@ body.dark-theme .chat-item:hover {
 /* NPC (Esquerda) */
 .bubble-left {
     background-color: var(--bubble-npc-bg);
-    color: var(--bubble-npc-text);
+    color: var(--bubble-npc-text) !important;
     border-radius: 0px 12px 12px 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     position: relative;
@@ -122,7 +135,7 @@ body.dark-theme .chat-item:hover {
 /* Player (Direita) */
 .bubble-right {
     background-color: var(--bubble-player-bg);
-    color: var(--bubble-player-text);
+    color: var(--bubble-player-text) !important;
     border-radius: 12px 0px 12px 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     position: relative;
@@ -145,4 +158,10 @@ body.dark-theme .chat-item:hover {
     background-color: var(--text-secondary); 
     opacity: 0.3;
     border-radius: 10px; 
+}
+
+/* Animação de Saída do Overlay */
+.fade-out {
+    opacity: 0;
+    pointer-events: none;
 }

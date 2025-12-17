@@ -1,8 +1,14 @@
 import { db, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp } from "./firebase.js";
 
 // --- CONFIGURAÇÃO ---
+const PLAYER_PROFILE = {
+    id: 'max', // ID do jogador (mantido 'max' para compatibilidade)
+    name: "Dani",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c"
+};
+
 const CHARACTERS = {
-    max: { name: "Max", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c&clothing=graphicShirt", side: "right" },
+    [PLAYER_PROFILE.id]: { name: PLAYER_PROFILE.name, avatar: PLAYER_PROFILE.avatar, side: "right" },
     chloe: { name: "Chloe", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", side: "left" },
     warren: { name: "Warren", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", side: "left" },
     victoria: { name: "Victoria", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", side: "left" },
@@ -11,23 +17,33 @@ const CHARACTERS = {
 
 // Elementos
 const messageContainer = document.getElementById('message-container');
-const charSelect = document.getElementById('char-select');
 const currentCharAvatar = document.getElementById('current-char-avatar');
 const msgInput = document.getElementById('msg-input');
 const chatContent = document.getElementById('chat-content');
 const emptyState = document.getElementById('empty-state');
 const chatArea = document.getElementById('chat-area');
 const sidebar = document.getElementById('sidebar');
+const profileScreen = document.getElementById('profile-selection-screen');
+const logoutBtn = document.getElementById('logout-btn');
 
+let currentUserType = 'player'; // 'player' | 'gm'
 let currentChatId = null;
+let currentSenderId = null;
 let unsubscribeMessages = null;
 
 // Inicialização
 async function init() {
     setupTheme();
-    setupAvatarSelector();
     
     // Listeners
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            profileScreen.classList.remove('fade-out');
+            profileScreen.style.pointerEvents = 'auto';
+            currentUserType = null;
+        });
+    }
+
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('back-btn').addEventListener('click', closeChatMobile);
     document.getElementById('send-btn').addEventListener('click', sendMessage);
@@ -39,8 +55,40 @@ async function init() {
         }
     });
 
+    msgInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+    });
+
+    // Expor função globalmente para o HTML chamar
+    window.selectPersona = selectPersona;
+
     await checkAndSeedChats();
     loadChatList();
+}
+
+// --- SISTEMA DE PERSONA (Fase 5) ---
+function selectPersona(type) {
+    currentUserType = type;
+    
+    // Animação de saída
+    profileScreen.classList.add('fade-out');
+    profileScreen.style.pointerEvents = 'none';
+
+    // Configurar Interface baseada no papel
+    const sendBtn = document.getElementById('send-btn');
+
+    if (type === 'player') {
+        // Modo PLAYER
+        // Visual
+        sendBtn.style.backgroundColor = 'var(--primary-accent)'; // Laranja
+        document.getElementById('current-char-avatar').style.cursor = 'default';
+    } else {
+        // Modo MESTRE
+        // Visual
+        sendBtn.style.backgroundColor = '#a855f7';
+        document.getElementById('current-char-avatar').style.cursor = 'default';
+    }
 }
 
 // --- BANCO DE DADOS ---
@@ -102,7 +150,8 @@ function openChat(chatId, chatData) {
     // UI Transitions - CORREÇÃO AQUI
     emptyState.classList.add('hidden');
     chatContent.classList.remove('hidden');
-    chatContent.classList.add('flex'); // Garante display: flex via Tailwind
+    chatContent.style.display = 'flex'; // Forçar display
+    chatContent.classList.add('flex', 'flex-col'); // <--- CRUCIAL: flex-col
 
     
     if (window.innerWidth < 768) {
@@ -110,6 +159,16 @@ function openChat(chatId, chatData) {
         chatArea.classList.remove('translate-x-full');
     }
 
+    // Identidade Automática (Fase 7)
+    if (currentUserType === 'gm') {
+        currentSenderId = chatId;
+        currentCharAvatar.src = chatData.avatar;
+    } else {
+        currentSenderId = PLAYER_PROFILE.id;
+        currentCharAvatar.src = PLAYER_PROFILE.avatar;
+    }
+
+    loadChatList(); 
     loadMessages(chatId);
 }
 
@@ -122,7 +181,7 @@ function closeChatMobile() {
     // Opcional: Voltar para empty state no desktop
     setTimeout(() => {
         chatContent.classList.add('hidden');
-        chatContent.classList.remove('flex');
+        chatContent.classList.remove('flex', 'flex-col');
         emptyState.classList.remove('hidden');
     }, 300);
 }
@@ -151,7 +210,9 @@ function loadMessages(chatId) {
         });
         
         // Rola para o final
-        messageContainer.scrollTop = messageContainer.scrollHeight;
+        setTimeout(() => {
+            messageContainer.scrollTo({ top: messageContainer.scrollHeight, behavior: 'smooth' });
+        }, 100);
     }, (error) => {
         console.error("Erro ao carregar mensagens:", error);
         if (error.code === 'failed-precondition') {
@@ -164,12 +225,10 @@ async function sendMessage() {
     const text = msgInput.value.trim();
     if (!text || !currentChatId) return;
 
-    const charId = charSelect.value;
-    
     // 1. Salva a mensagem
     await addDoc(collection(db, "messages"), {
         text, 
-        characterId: charId, 
+        characterId: currentSenderId, 
         chatId: currentChatId, 
         createdAt: serverTimestamp()
     });
@@ -181,11 +240,15 @@ async function sendMessage() {
     });
 
     msgInput.value = '';
+    msgInput.style.height = 'auto';
+    msgInput.focus();
 }
 
 function createMessageElement(data, docId) {
     const charConfig = CHARACTERS[data.characterId] || CHARACTERS['chloe'];
-    const isSelf = charConfig.side === 'right';
+    
+    // REGRA DE OURO: Se o personagem for o Player, é Direita. Todos os outros são Esquerda.
+    const isPlayer = data.characterId === PLAYER_PROFILE.id;
     
     let timeStr = '';
     if (data.createdAt) {
@@ -195,18 +258,17 @@ function createMessageElement(data, docId) {
 
     const wrapper = document.createElement('div');
     // Flex direction column para alinhar corretamente
-    wrapper.className = `flex w-full ${isSelf ? 'justify-end' : 'justify-start'} mb-1`;
+    wrapper.className = `flex w-full mb-2 ${isPlayer ? 'justify-end' : 'justify-start'}`;
     
-    const bubbleClass = isSelf ? 'bubble-right' : 'bubble-left';
-    
-    const nameLabel = !isSelf ? `<div class="text-[10px] font-bold uppercase tracking-wide mb-0.5 opacity-80" style="color: var(--primary-accent)">${charConfig.name}</div>` : '';
+    const bubbleClass = isPlayer ? 'bubble-right' : 'bubble-left';
 
+    // REMOVER classes como 'text-gray-800' ou 'dark:text-gray-100' daqui!
+    // Usar apenas cores herdadas do CSS.
     wrapper.innerHTML = `
         <div class="relative max-w-[85%] md:max-w-[65%] ${bubbleClass} px-3 py-2 text-sm shadow-sm group min-w-[80px]">
-            ${nameLabel}
-            <div class="leading-relaxed whitespace-pre-wrap">${data.text}</div>
+            <div class="leading-relaxed whitespace-pre-wrap select-text">${data.text}</div>
             <div class="flex justify-end items-center gap-1 mt-0.5 select-none opacity-70">
-                <span class="text-[10px] font-mono">${timeStr}</span>
+                <span class="text-[10px] font-mono inherit-color">${timeStr}</span>
                 <button onclick="window.deleteMessage('${docId}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 ml-1 cursor-pointer" title="Apagar">
                     <span class="material-symbols-outlined text-[14px]">delete</span>
                 </button>
@@ -219,23 +281,6 @@ function createMessageElement(data, docId) {
 window.deleteMessage = async (id) => {
     if(confirm("Apagar mensagem?")) await deleteDoc(doc(db, "messages", id));
 };
-
-function setupAvatarSelector() {
-    charSelect.innerHTML = '';
-    for (const [key, char] of Object.entries(CHARACTERS)) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = char.name;
-        charSelect.appendChild(option);
-    }
-    charSelect.addEventListener('change', () => {
-        const char = CHARACTERS[charSelect.value];
-        currentCharAvatar.src = char.avatar;
-    });
-    // Set default
-    charSelect.value = 'max';
-    currentCharAvatar.src = CHARACTERS['max'].avatar;
-}
 
 function setupTheme() {
     const saved = localStorage.getItem('theme');

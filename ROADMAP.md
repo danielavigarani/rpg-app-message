@@ -1,125 +1,93 @@
-# 🦋 Life is Strange RPG Messenger - Guia de Correção v3.0
+# 🦋 Life is Strange RPG Messenger - Guia de Correção v9.0 (Texto Invisível)
 
-## 🚨 STATUS CRÍTICO: Correção de Layout e Renderização
-**Problema Atual:** O aplicativo envia mensagens para o Firebase (elas aparecem na sidebar), mas a **área de chat principal não renderiza as mensagens**, ficando branca/vazia. Além disso, o layout flexbox está quebrando, empurrando o conteúdo para fora da visão.
-
----
-
-## 🎯 Objetivo da Sessão
-1.  Corrigir o CSS do container de mensagens para que ele ocupe a altura correta e permita rolagem.
-2.  Garantir que a função `loadMessages()` filtre e exiba os dados na tela corretamente.
-3.  Aplicar rigorosamente a paleta de cores "Life is Strange" definida abaixo.
+## 🚨 DIAGNÓSTICO FINAL
+**Problema:** O texto das mensagens está invisível ou com baixo contraste.
+**Causa:** Conflito entre as cores do Tailwind (`text-gray-800`) e as variáveis CSS do tema (`--bubble-npc-text`).
 
 ---
 
-## 🎨 1. Design System (CSS Variables)
-**Instrução:** Substitua todas as variáveis de cor no `style.css` por estas. Não use cores padrão do Tailwind (como `bg-gray-900`) para elementos estruturais, use as variáveis.
+## 🛠️ Instruções de Correção
 
-### ☀️ Light Mode (Morning Arcadia)
+### 1. Limpeza Radical no CSS (`style.css`)
+Vamos simplificar as cores para garantir contraste.
+
+**Substitua o bloco `:root` e `.dark-theme` por:**
 ```css
 :root {
-    --app-bg: #fbf5f1;              /* Fundo Geral */
-    --sidebar-bg: #f3eae4;          /* Lateral levemente mais escura */
-    --border-color: #e6dace;        /* Bordas */
-    
+    /* Light Mode */
+    --app-bg: #fbf5f1;
+    --sidebar-bg: #f3eae4;
+    --border-color: #e6dace;
     --text-primary: #0b0805;
-    --text-secondary: #5d554f;
-
+    
     /* Balões */
     --bubble-npc-bg: #ffffff;
-    --bubble-npc-text: #0b0805;
-    --bubble-player-bg: #f2b378;    /* Laranja LiS */
-    --bubble-player-text: #0b0805;
+    --bubble-npc-text: #000000; /* Preto absoluto para leitura */
     
-    --primary-accent: #945d29;      /* Detalhes/Botões */
+    --bubble-player-bg: #f2b378;
+    --bubble-player-text: #000000; /* Preto no Laranja */
+    
+    --primary-accent: #945d29;
 }
-🌙 Dark Mode (Dark Room)
+
 body.dark-theme {
-    --app-bg: #0d0607;              /* Preto Avermelhado */
+    /* Dark Mode */
+    --app-bg: #0d0607;
     --sidebar-bg: #140a0b;
     --border-color: #2b1517;
-
     --text-primary: #eae3e4;
-    --text-secondary: #9f8c8e;
 
     /* Balões */
-    --bubble-npc-bg: #1f1f1f;       
-    --bubble-npc-text: #eae3e4;
-    --bubble-player-bg: #951526;    /* Vermelho Escuro */
-    --bubble-player-text: #eae3e4;
+    --bubble-npc-bg: #1f1f1f;
+    --bubble-npc-text: #ffffff; /* Branco no Cinza Escuro */
     
-    --primary-accent: #ffb6c0;      /* Rosa/Vermelho Claro */
+    --bubble-player-bg: #951526;
+    --bubble-player-text: #ffffff; /* Branco no Vermelho */
+    
+    --primary-accent: #ffb6c0;
 }
-🛠️ 2. Estrutura de Layout (Correção CSS)
 
-Instrução: O layout deve seguir estritamente o modelo Flexbox Vertical para evitar o bug de "tela branca".
-Estrutura do #chat-area (Painel Direito)
+2. Correção no Javascript (script.js) - Função createMessageElement
 
-    Pai (#chat-content):
+O HTML gerado para a mensagem deve remover classes de cor do Tailwind que conflitam e usar apenas as variáveis CSS.
 
-        Deve ter display: flex.
+Código da Função Corrigida:
 
-        Deve ter flex-direction: column.
-
-        Deve ter height: 100% e overflow: hidden (CRUCIAL).
-
-    Filho Expansível (#message-container):
-
-        Deve ter flex: 1 (para crescer).
-
-        Deve ter overflow-y: auto (para rolar).
-
-        Deve ter min-height: 0 (truque de CSS para flexbox aninhado funcionar).
-
-        Deve ter display: flex com flex-direction: column.
-
-🧠 3. Lógica Javascript (script.js)
-Função openChat(chatId, chatData)
-
-Ao clicar num chat da lista:
-
-    Atualizar a variável global currentChatId.
-
-    Desktop: Adicionar classe hidden ao #empty-state e remover hidden do #chat-content.
-
-    Mobile: Adicionar classe -translate-x-full na sidebar e remover da chat-area.
-
-    Chamar loadMessages(chatId) imediatamente.
-
-Função loadMessages(chatId) (Onde o bug reside)
-
-    Verificar se chatId é válido.
-
-    Cancelar listener anterior (unsubscribeMessages).
-
-    Criar Query: Coleção messages -> where('chatId', '==', chatId) -> orderBy('createdAt').
-
-    No Snapshot:
-
-        Limpar #message-container (innerHTML = '').
-
-        Se snapshot estiver vazio, exibir um log ou aviso visual.
-
-        Loopar documentos e inserir HTML via createMessageElement.
-
-        Importante: Chamar scrollToBottom() após renderizar.
-
-Função createMessageElement(data)
-
-    Certificar que o HTML gerado usa as classes de cor variáveis (ex: bg-[var(--bubble-player-bg)]) e não classes estáticas do Tailwind.
-
-    Garantir que o texto da mensagem não esteja com cor branca sobre fundo branco.
-
-💾 4. Estrutura de Dados (Referência)
-
-Coleção chats:
-
-    Document ID: chloe
-
-    Fields: name, avatar, lastMessage
-
-Coleção messages:
-
-    Fields: text, createdAt, characterId, chatId (Link para o chat pai).
-
+function createMessageElement(data, docId) {
+    const isPlayer = data.characterId === PLAYER_PROFILE.id;
     
+    // ... (lógica de hora e lado) ...
+
+    const bubbleClass = isPlayer ? 'bubble-right' : 'bubble-left';
+
+    // REMOVER classes como 'text-gray-800' ou 'dark:text-gray-100' daqui!
+    // Usar apenas cores herdadas do CSS.
+    wrapper.innerHTML = `
+        <div class="relative max-w-[85%] md:max-w-[65%] ${bubbleClass} px-3 py-2 text-sm shadow-sm group min-w-[80px]">
+            ${nameLabel}
+            <div class="leading-relaxed whitespace-pre-wrap select-text">${data.text}</div>
+            
+            <div class="flex justify-end items-center gap-1 mt-0.5 select-none opacity-70">
+                <span class="text-[10px] font-mono inherit-color">${timeStr}</span>
+                </div>
+        </div>
+    `;
+    return wrapper;
+}
+
+3. CSS de Reforço (style.css)
+
+Adicionar regra para forçar a cor do texto dentro do balão.
+
+.bubble-left, .bubble-right {
+    color: var(--bubble-npc-text) !important; /* Força a cor NPC como base */
+}
+
+.bubble-right {
+    color: var(--bubble-player-text) !important; /* Sobrescreve para Player */
+}
+
+### O que vai acontecer?
+Ao remover as classes `text-gray-800` (cinza escuro) que o Tailwind coloca por padrão, o texto vai finalmente obedecer à cor que definimos no CSS:
+* **NPC (Dark Mode):** Fundo Cinza -> Texto **Branco Pura**.
+* **Player (Dark Mode):** Fundo Vermelho -> Texto **Branco Pura**.
