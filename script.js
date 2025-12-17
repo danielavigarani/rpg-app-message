@@ -1,44 +1,226 @@
-import { db, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "./firebase.js";
+import { db, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp } from "./firebase.js";
 
-// --- CONFIGURAÇÃO DE PERSONAGENS (Fase 3) ---
-// Adicione quantos quiser aqui!
+// --- CONFIGURAÇÃO ---
 const CHARACTERS = {
-    max: { 
-        name: "Max", 
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c&clothing=graphicShirt", 
-        side: "right" // Lado do "Jogador" (Balão Branco)
-    },
-    chloe: { 
-        name: "Chloe", 
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", 
-        side: "left"  // Lado do "NPC" (Balão Laranja)
-    },
-    warren: { 
-        name: "Warren", 
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", 
-        side: "left" 
-    },
-    victoria: { 
-        name: "Victoria", 
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", 
-        side: "left" 
-    },
-    wells: { 
-        name: "Diretor Wells", 
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Wells&facialHair=mustache", 
-        side: "left" 
-    }
+    max: { name: "Max", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c&clothing=graphicShirt", side: "right" },
+    chloe: { name: "Chloe", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", side: "left" },
+    warren: { name: "Warren", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", side: "left" },
+    victoria: { name: "Victoria", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", side: "left" },
+    wells: { name: "Diretor Wells", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Wells&facialHair=mustache", side: "left" }
 };
 
-const container = document.getElementById('message-container');
-const modal = document.getElementById('input-modal');
-const form = document.getElementById('message-form');
+// Elementos
+const messageContainer = document.getElementById('message-container');
 const charSelect = document.getElementById('char-select');
+const currentCharAvatar = document.getElementById('current-char-avatar');
+const msgInput = document.getElementById('msg-input');
+const chatContent = document.getElementById('chat-content');
+const emptyState = document.getElementById('empty-state');
+const chatArea = document.getElementById('chat-area');
+const sidebar = document.getElementById('sidebar');
 
-// --- INICIALIZAÇÃO ---
+let currentChatId = null;
+let unsubscribeMessages = null;
 
-// 1. Preencher o Dropdown de Personagens automaticamente
-function populateCharacterSelect() {
+// Inicialização
+async function init() {
+    setupTheme();
+    setupAvatarSelector();
+    
+    // Listeners
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    document.getElementById('back-btn').addEventListener('click', closeChatMobile);
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+    
+    msgInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    await checkAndSeedChats();
+    loadChatList();
+}
+
+// --- BANCO DE DADOS ---
+async function checkAndSeedChats() {
+    const q = query(collection(db, "chats"));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+        const seeds = [
+            { id: 'chloe', name: 'Chloe Price', avatar: CHARACTERS.chloe.avatar, lastMessage: 'Ei, Max!', lastTime: new Date() },
+            { id: 'warren', name: 'Warren Graham', avatar: CHARACTERS.warren.avatar, lastMessage: '...', lastTime: new Date() }
+        ];
+        for (const seed of seeds) {
+            const { id, ...data } = seed;
+            await setDoc(doc(db, "chats", id), data);
+        }
+    }
+}
+
+function loadChatList() {
+    const container = document.getElementById('chat-list-container');
+    const q = query(collection(db, "chats"), orderBy("lastTime", "desc"));
+    
+    onSnapshot(q, (snapshot) => {
+        container.innerHTML = '';
+        snapshot.forEach(docSnap => {
+            const chat = docSnap.data();
+            const chatId = docSnap.id;
+            
+            const el = document.createElement('div');
+            el.className = `chat-item flex items-center p-3 cursor-pointer border-b border-gray-500/10 transition-colors gap-3 ${currentChatId === chatId ? 'active' : ''}`;
+            el.onclick = () => openChat(chatId, chat);
+            
+            let timeStr = '';
+            if (chat.lastTime) {
+                const date = chat.lastTime.toDate ? chat.lastTime.toDate() : new Date(chat.lastTime);
+                timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
+
+            el.innerHTML = `
+                <img src="${chat.avatar}" class="w-12 h-12 rounded-full object-cover bg-gray-300">
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-baseline">
+                        <h3 class="font-bold text-sm truncate" style="color: var(--text-primary)">${chat.name}</h3>
+                        <span class="text-xs opacity-60 font-mono">${timeStr}</span>
+                    </div>
+                    <p class="text-xs opacity-80 truncate" style="color: var(--text-secondary)">${chat.lastMessage || '...'}</p>
+                </div>
+            `;
+            container.appendChild(el);
+        });
+    });
+}
+
+function openChat(chatId, chatData) {
+    currentChatId = chatId;
+    document.getElementById('chat-header-name').textContent = chatData.name;
+    document.getElementById('chat-header-avatar').src = chatData.avatar;
+    
+    // UI Transitions - CORREÇÃO AQUI
+    emptyState.classList.add('hidden');
+    chatContent.classList.remove('hidden');
+    chatContent.classList.add('flex'); // Garante display: flex via Tailwind
+
+    
+    if (window.innerWidth < 768) {
+        sidebar.classList.add('-translate-x-full');
+        chatArea.classList.remove('translate-x-full');
+    }
+
+    loadMessages(chatId);
+}
+
+function closeChatMobile() {
+    currentChatId = null;
+    if (unsubscribeMessages) unsubscribeMessages();
+    sidebar.classList.remove('-translate-x-full');
+    chatArea.classList.add('translate-x-full');
+    
+    // Opcional: Voltar para empty state no desktop
+    setTimeout(() => {
+        chatContent.classList.add('hidden');
+        chatContent.classList.remove('flex');
+        emptyState.classList.remove('hidden');
+    }, 300);
+}
+
+function loadMessages(chatId) {
+    if (unsubscribeMessages) unsubscribeMessages();
+
+    // Query para pegar as mensagens DO CHAT ATUAL
+    const q = query(
+        collection(db, "messages"), 
+        where("chatId", "==", chatId), 
+        orderBy("createdAt", "asc")
+    );
+
+    unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        messageContainer.innerHTML = '';
+        
+        if(snapshot.empty) {
+            console.log("Nenhuma mensagem encontrada para este chat.");
+            // Opcional: Mostrar aviso de "Comece a conversa"
+        }
+
+        snapshot.forEach(docSnap => {
+            const msg = docSnap.data();
+            messageContainer.appendChild(createMessageElement(msg, docSnap.id));
+        });
+        
+        // Rola para o final
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+    }, (error) => {
+        console.error("Erro ao carregar mensagens:", error);
+        if (error.code === 'failed-precondition') {
+            alert("ERRO DE ÍNDICE FIREBASE: Abra o console do navegador (F12), procure pelo link de erro do Firebase e clique nele para criar o índice necessário.");
+        }
+    });
+}
+
+async function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text || !currentChatId) return;
+
+    const charId = charSelect.value;
+    
+    // 1. Salva a mensagem
+    await addDoc(collection(db, "messages"), {
+        text, 
+        characterId: charId, 
+        chatId: currentChatId, 
+        createdAt: serverTimestamp()
+    });
+
+    // 2. Atualiza o chat na lista lateral
+    await updateDoc(doc(db, "chats", currentChatId), {
+        lastMessage: text, 
+        lastTime: serverTimestamp()
+    });
+
+    msgInput.value = '';
+}
+
+function createMessageElement(data, docId) {
+    const charConfig = CHARACTERS[data.characterId] || CHARACTERS['chloe'];
+    const isSelf = charConfig.side === 'right';
+    
+    let timeStr = '';
+    if (data.createdAt) {
+        const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date();
+        timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    const wrapper = document.createElement('div');
+    // Flex direction column para alinhar corretamente
+    wrapper.className = `flex w-full ${isSelf ? 'justify-end' : 'justify-start'} mb-1`;
+    
+    const bubbleClass = isSelf ? 'bubble-right' : 'bubble-left';
+    
+    const nameLabel = !isSelf ? `<div class="text-[10px] font-bold uppercase tracking-wide mb-0.5 opacity-80" style="color: var(--primary-accent)">${charConfig.name}</div>` : '';
+
+    wrapper.innerHTML = `
+        <div class="relative max-w-[85%] md:max-w-[65%] ${bubbleClass} px-3 py-2 text-sm shadow-sm group min-w-[80px]">
+            ${nameLabel}
+            <div class="leading-relaxed whitespace-pre-wrap">${data.text}</div>
+            <div class="flex justify-end items-center gap-1 mt-0.5 select-none opacity-70">
+                <span class="text-[10px] font-mono">${timeStr}</span>
+                <button onclick="window.deleteMessage('${docId}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 ml-1 cursor-pointer" title="Apagar">
+                    <span class="material-symbols-outlined text-[14px]">delete</span>
+                </button>
+            </div>
+        </div>
+    `;
+    return wrapper;
+}
+
+window.deleteMessage = async (id) => {
+    if(confirm("Apagar mensagem?")) await deleteDoc(doc(db, "messages", id));
+};
+
+function setupAvatarSelector() {
     charSelect.innerHTML = '';
     for (const [key, char] of Object.entries(CHARACTERS)) {
         const option = document.createElement('option');
@@ -46,123 +228,25 @@ function populateCharacterSelect() {
         option.textContent = char.name;
         charSelect.appendChild(option);
     }
-}
-
-// 2. Enviar Mensagem para o Firebase
-async function sendMessageToCloud(text, date, time, characterId) {
-    try {
-        await addDoc(collection(db, "messages"), {
-            text: text,
-            date: date,
-            time: time,
-            characterId: characterId, // Salvamos QUEM falou
-            createdAt: new Date()
-        });
-    } catch (e) {
-        console.error("Erro envio:", e);
-        alert("Erro ao enviar mensagem.");
-    }
-}
-
-// 3. Escutar Mensagens
-function listenToMessages() {
-    const q = query(collection(db, "messages"), orderBy("createdAt"));
-
-    onSnapshot(q, (snapshot) => {
-        container.innerHTML = ''; 
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            // Passamos o ID do personagem para a função de criar elemento
-            container.appendChild(createMessageElement(data.text, data.time, data.date, data.characterId, docSnap.id));
-        });
-        container.scrollTop = container.scrollHeight;
+    charSelect.addEventListener('change', () => {
+        const char = CHARACTERS[charSelect.value];
+        currentCharAvatar.src = char.avatar;
     });
+    // Set default
+    charSelect.value = 'max';
+    currentCharAvatar.src = CHARACTERS['max'].avatar;
 }
 
-// 4. Deletar Mensagem
-window.deleteMessage = async function(id) {
-    if(confirm("Deseja rebobinar e apagar esta mensagem?")) {
-        await deleteDoc(doc(db, "messages", id));
+function setupTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark') {
+        document.body.classList.add('dark-theme');
     }
 }
 
-// --- UI HELPERS ---
-
-window.toggleModal = function() {
-    modal.classList.toggle('hidden');
-    if (!modal.classList.contains('hidden')) {
-        const now = new Date();
-        document.getElementById('msg-date').value = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}`;
-        document.getElementById('msg-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        document.getElementById('msg-text').focus();
-    }
+function toggleTheme() {
+    document.body.classList.toggle('dark-theme');
+    localStorage.setItem('theme', document.body.classList.contains('dark-theme') ? 'dark' : 'light');
 }
 
-function createMessageElement(text, time, date, characterId, docId) {
-    // Busca a config do personagem ou usa Chloe como fallback se der erro
-    const charConfig = CHARACTERS[characterId] || CHARACTERS['chloe'];
-    const isSelf = charConfig.side === 'right'; // Define o lado baseado na config
-
-    const wrapper = document.createElement('div');
-    wrapper.className = `flex items-start w-full animate-pop ${isSelf ? 'justify-end' : ''}`;
-    
-    const timestamp = `${date} - ${time}`;
-    
-    // Botão de deletar
-    const deleteBtn = `<button onclick="deleteMessage('${docId}')" class="absolute -top-2 ${!isSelf ? '-right-2' : '-left-2'} bg-red-500 text-white rounded-full w-5 h-5 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pb-0.5 z-50">×</button>`;
-
-    // Define estilos baseados no lado
-    let bubbleClass = '';
-    if (!isSelf) {
-        // NPC (Esquerda)
-        bubbleClass = 'bg-orange-500 text-white bubble-left';
-    } else {
-        // Player/Max (Direita)
-        bubbleClass = 'bg-white text-gray-800 border-2 border-orange-500 bubble-right';
-    }
-
-    // HTML do Conteúdo
-    const content = `
-        <div class="relative ${bubbleClass} p-4 rounded-lg shadow-sm max-w-[75%] group">
-            <p class="text-xs font-bold mb-1 opacity-70 uppercase tracking-wider">${charConfig.name}</p>
-            <p class="text-lg leading-snug whitespace-pre-wrap">${text}</p>
-            <span class="block text-right text-xs mt-1 opacity-80 font-mono">${timestamp}</span>
-            ${deleteBtn}
-        </div>`;
-
-    // Montagem Final
-    if (!isSelf) {
-        wrapper.innerHTML = `
-            <div class="w-12 h-12 rounded-full border-2 border-white bg-gray-300 overflow-hidden mr-3 shadow-sm flex-shrink-0">
-                 <img src="${charConfig.avatar}" class="w-full h-full object-cover" title="${charConfig.name}">
-            </div>
-            ${content}`;
-    } else {
-        wrapper.innerHTML = `
-            ${content}
-            <div class="w-12 h-12 rounded-full border-2 border-orange-500 bg-gray-100 overflow-hidden ml-3 shadow-sm flex-shrink-0">
-                <img src="${charConfig.avatar}" class="w-full h-full object-cover" title="${charConfig.name}">
-            </div>`;
-    }
-    return wrapper;
-}
-
-// --- EVENT LISTENER ---
-
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const text = document.getElementById('msg-text').value;
-    const date = document.getElementById('msg-date').value;
-    const time = document.getElementById('msg-time').value;
-    const charId = document.getElementById('char-select').value; // Pega o valor do dropdown
-    
-    await sendMessageToCloud(text, date, time, charId);
-    
-    form.reset();
-    toggleModal();
-});
-
-
-// Inicializa tudo
-populateCharacterSelect();
-listenToMessages();
+init();
