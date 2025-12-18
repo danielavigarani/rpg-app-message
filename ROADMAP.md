@@ -1,93 +1,78 @@
-# 🦋 Life is Strange RPG Messenger - Guia de Correção v9.0 (Texto Invisível)
+# 🟢 WhatsApp RPG - Guia de Privacidade & Modal v13.0
 
-## 🚨 DIAGNÓSTICO FINAL
-**Problema:** O texto das mensagens está invisível ou com baixo contraste.
-**Causa:** Conflito entre as cores do Tailwind (`text-gray-800`) e as variáveis CSS do tema (`--bubble-npc-text`).
+## 🎯 Objetivos
+1.  **Privacidade de Dados:** Alterar a consulta do banco para carregar apenas os chats onde o usuário logado é participante. (O Mestre vê todos).
+2.  **Modal "Novo Contato":** Criar uma janela sobreposta animada para escolher entre adicionar "Jogador Real" (via código) ou "NPC" (via nome).
 
 ---
 
-## 🛠️ Instruções de Correção
+## 🛠️ Especificações Técnicas
 
-### 1. Limpeza Radical no CSS (`style.css`)
-Vamos simplificar as cores para garantir contraste.
+### 1. Banco de Dados (Firestore)
+Para que cada um tenha seus contatos, precisamos saber quem participa de cada conversa.
+**Alteração na Criação de Chat:**
+Adicionar o campo `participants` (Array) em cada documento `chats`.
+- Chat NPC: `participants: [ "codigo_do_jogador", "codigo_do_mestre" ]`
+- Chat Jogador x Jogador: `participants: [ "codigo_jog_A", "codigo_jog_B", "codigo_do_mestre" ]` (Mestre sempre vê tudo).
 
-**Substitua o bloco `:root` e `.dark-theme` por:**
-```css
-:root {
-    /* Light Mode */
-    --app-bg: #fbf5f1;
-    --sidebar-bg: #f3eae4;
-    --border-color: #e6dace;
-    --text-primary: #0b0805;
-    
-    /* Balões */
-    --bubble-npc-bg: #ffffff;
-    --bubble-npc-text: #000000; /* Preto absoluto para leitura */
-    
-    --bubble-player-bg: #f2b378;
-    --bubble-player-text: #000000; /* Preto no Laranja */
-    
-    --primary-accent: #945d29;
-}
+**Alteração na Leitura (`loadChatList`):**
+- Se `currentUserType == 'gm'`: Carrega **TUDO**.
+- Se `currentUserType == 'player'`: Filtra `where("participants", "array-contains", myCode)`.
 
-body.dark-theme {
-    /* Dark Mode */
-    --app-bg: #0d0607;
-    --sidebar-bg: #140a0b;
-    --border-color: #2b1517;
-    --text-primary: #eae3e4;
+### 2. UI: Modal Animado (`index.html` e `style.css`)
+Substituir o `prompt` nativo por um Modal Customizado.
 
-    /* Balões */
-    --bubble-npc-bg: #1f1f1f;
-    --bubble-npc-text: #ffffff; /* Branco no Cinza Escuro */
-    
-    --bubble-player-bg: #951526;
-    --bubble-player-text: #ffffff; /* Branco no Vermelho */
-    
-    --primary-accent: #ffb6c0;
-}
-
-2. Correção no Javascript (script.js) - Função createMessageElement
-
-O HTML gerado para a mensagem deve remover classes de cor do Tailwind que conflitam e usar apenas as variáveis CSS.
-
-Código da Função Corrigida:
-
-function createMessageElement(data, docId) {
-    const isPlayer = data.characterId === PLAYER_PROFILE.id;
-    
-    // ... (lógica de hora e lado) ...
-
-    const bubbleClass = isPlayer ? 'bubble-right' : 'bubble-left';
-
-    // REMOVER classes como 'text-gray-800' ou 'dark:text-gray-100' daqui!
-    // Usar apenas cores herdadas do CSS.
-    wrapper.innerHTML = `
-        <div class="relative max-w-[85%] md:max-w-[65%] ${bubbleClass} px-3 py-2 text-sm shadow-sm group min-w-[80px]">
-            ${nameLabel}
-            <div class="leading-relaxed whitespace-pre-wrap select-text">${data.text}</div>
-            
-            <div class="flex justify-end items-center gap-1 mt-0.5 select-none opacity-70">
-                <span class="text-[10px] font-mono inherit-color">${timeStr}</span>
-                </div>
+**Estrutura HTML:**
+```html
+<div id="new-chat-modal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-[#202c33] p-6 rounded-2xl w-96 transform scale-90 transition-transform duration-300 shadow-2xl border border-[#00a884]/20">
+        <h2 class="text-white text-xl font-bold mb-4 text-center">Novo Contato</h2>
+        
+        <div class="flex gap-2 mb-4 bg-[#111b21] p-1 rounded-lg">
+            <button onclick="switchTab('npc')" class="flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition">NPC</button>
+            <button onclick="switchTab('player')" class="flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition">Outro Jogador</button>
         </div>
-    `;
-    return wrapper;
-}
 
-3. CSS de Reforço (style.css)
+        <div id="input-npc">
+            <input type="text" id="npc-name-input" placeholder="Nome do Personagem (ex: Nathan)" class="w-full bg-[#2a3942] text-white p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[#00a884]">
+        </div>
+        <div id="input-player" class="hidden">
+            <input type="text" id="player-code-input" placeholder="Código do Jogador (ex: 1234)" class="w-full bg-[#2a3942] text-white p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[#00a884]">
+        </div>
 
-Adicionar regra para forçar a cor do texto dentro do balão.
+        <div class="flex justify-end gap-3 mt-6">
+            <button id="cancel-modal-btn" class="text-[#00a884] hover:bg-[#2a3942] px-4 py-2 rounded-lg font-bold">Cancelar</button>
+            <button id="confirm-add-btn" class="bg-[#00a884] hover:bg-[#008f6f] text-[#111b21] px-6 py-2 rounded-lg font-bold shadow-lg shadow-[#00a884]/20">Adicionar</button>
+        </div>
+    </div>
+</div>
 
-.bubble-left, .bubble-right {
-    color: var(--bubble-npc-text) !important; /* Força a cor NPC como base */
-}
+3. Lógica Javascript (script.js)
 
-.bubble-right {
-    color: var(--bubble-player-text) !important; /* Sobrescreve para Player */
-}
+Função openNewChatModal():
 
-### O que vai acontecer?
-Ao remover as classes `text-gray-800` (cinza escuro) que o Tailwind coloca por padrão, o texto vai finalmente obedecer à cor que definimos no CSS:
-* **NPC (Dark Mode):** Fundo Cinza -> Texto **Branco Pura**.
-* **Player (Dark Mode):** Fundo Vermelho -> Texto **Branco Pura**.
+    Remove classe hidden.
+
+    Adiciona classe opacity-100 (Fade In).
+
+Função addNewContact():
+
+    Modo NPC:
+
+        Pega o nome digitado.
+
+        Cria chat no banco com participants: [meuCodigo, codigoMestre].
+
+        Avatar: DiceBear seed = nome.
+
+    Modo Jogador:
+
+        Pega o código digitado.
+
+        Busca na coleção access_codes se esse código existe.
+
+        Se existir: Cria chat com participants: [meuCodigo, codigoDele, codigoMestre].
+
+        Nome do Chat: Nome do Jogador encontrado.
+
+        

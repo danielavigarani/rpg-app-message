@@ -14,32 +14,36 @@
 </head>
 <body class="bg-black h-screen w-screen flex items-center justify-center overflow-hidden font-sans">
 
-    <!-- TELA DE SELEÇÃO DE PERFIL (FASE 5) -->
-    <div id="profile-selection-screen" class="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-500">
-        
-        <h1 class="font-['Caveat'] text-5xl md:text-7xl text-white mb-12 tracking-widest animate-pulse">Quem é você hoje?</h1>
-        
-        <div class="flex flex-col md:flex-row gap-8 md:gap-16">
+    <!-- TELA DE LOGIN (FASE 11) -->
+    <div id="login-screen" class="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="w-full max-w-xs text-center">
+            <h1 class="text-white text-2xl mb-8 font-light tracking-widest opacity-80">WHATSAPP RPG</h1>
+            <input type="tel" id="access-code-input" class="bg-transparent border-b border-gray-700 text-center text-white text-4xl tracking-[0.5em] w-full py-2 focus:outline-none focus:border-[#00a884] transition-colors placeholder-gray-800 font-mono" placeholder="••••" maxlength="4" autocomplete="off">
+            <p id="login-error" class="text-red-500 text-sm mt-4 opacity-0 transition-opacity font-mono">Código de acesso inválido</p>
+        </div>
+    </div>
+
+    <!-- MODAL NOVO CONTATO (FASE 13) -->
+    <div id="new-chat-modal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-[#202c33] p-6 rounded-2xl w-96 transform scale-90 transition-transform duration-300 shadow-2xl border border-[#00a884]/20">
+            <h2 class="text-white text-xl font-bold mb-4 text-center">Novo Contato</h2>
             
-            <!-- Opção Player (Max) -->
-            <div onclick="selectPersona('player')" class="profile-card group cursor-pointer flex flex-col items-center gap-4 transition-transform hover:scale-105">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-transparent group-hover:border-[#f2b378] overflow-hidden transition-all shadow-2xl relative">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c" class="w-full h-full object-cover">
-                    <div class="absolute inset-0 bg-[#f2b378]/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </div>
-                <span class="text-2xl text-gray-400 group-hover:text-[#f2b378] font-bold tracking-wide transition-colors">MAX (Eu)</span>
+            <div class="flex gap-2 mb-4 bg-[#111b21] p-1 rounded-lg">
+                <button id="tab-npc" onclick="switchTab('npc')" class="flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition font-medium">NPC</button>
+                <button id="tab-player" onclick="switchTab('player')" class="flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition font-medium">Outro Jogador</button>
             </div>
 
-            <div class="h-px w-full md:w-px md:h-48 bg-gray-800 self-center"></div>
-
-            <!-- Opção Mestre (NPCs) -->
-            <div onclick="selectPersona('gm')" class="profile-card group cursor-pointer flex flex-col items-center gap-4 transition-transform hover:scale-105">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-transparent group-hover:border-[#a855f7] overflow-hidden transition-all shadow-2xl relative bg-gray-900 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-6xl text-gray-600 group-hover:text-[#a855f7] transition-colors">diversity_3</span>
-                </div>
-                <span class="text-2xl text-gray-400 group-hover:text-[#a855f7] font-bold tracking-wide transition-colors">MESTRE (NPCs)</span>
+            <div id="input-npc">
+                <input type="text" id="npc-name-input" placeholder="Nome do Personagem (ex: Nathan)" class="w-full bg-[#2a3942] text-white p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[#00a884] placeholder-gray-500">
+            </div>
+            <div id="input-player" class="hidden">
+                <input type="text" id="player-code-input" placeholder="Código do Jogador (ex: 1234)" class="w-full bg-[#2a3942] text-white p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[#00a884] placeholder-gray-500">
             </div>
 
+            <div class="flex justify-end gap-3 mt-6">
+                <button id="cancel-modal-btn" class="text-[#00a884] hover:bg-[#2a3942] px-4 py-2 rounded-lg font-bold text-sm transition">Cancelar</button>
+                <button id="confirm-add-btn" class="bg-[#00a884] hover:bg-[#008f6f] text-[#111b21] px-6 py-2 rounded-lg font-bold shadow-lg shadow-[#00a884]/20 text-sm transition">Adicionar</button>
+            </div>
         </div>
     </div>
 
@@ -47,15 +51,30 @@
 
         <div id="sidebar" class="w-full md:w-[400px] border-r flex flex-col h-full z-10 absolute md:relative transition-transform duration-300 bg-[var(--sidebar-bg)]">
             
-            <div class="h-16 flex items-center justify-between px-4 border-b border-gray-500/10 shrink-0">
+            <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-color)] shrink-0 bg-[var(--header-bg)]">
                 <div class="flex items-center gap-2">
                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" class="w-10 h-10 rounded-full bg-gray-300 border border-gray-500/20">
-                    <span class="font-bold tracking-wide" style="color: var(--primary-accent)">Lacres</span>
                 </div>
-                <div class="flex gap-2 text-[var(--text-secondary)]">
+                <div class="flex gap-3 text-[var(--text-secondary)]">
+                    <button id="theme-toggle" title="Mudar Tema" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition">dark_mode</button>
+                    <button id="new-chat-btn" title="Novo Contato" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition">add_comment</button>
                     <button id="logout-btn" title="Trocar Perfil" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition text-red-400">logout</button>
-                    <button id="theme-toggle" class="material-symbols-outlined p-2 hover:bg-black/5 rounded-full transition">dark_mode</button>
                 </div>
+            </div>
+
+            <!-- Barra de Pesquisa -->
+            <div class="px-3 py-2">
+                <div class="flex items-center bg-[var(--header-bg)] rounded-lg px-2 py-1.5 border-b border-transparent focus-within:border-[var(--border-color)]">
+                    <span class="material-symbols-outlined text-[var(--text-secondary)] text-sm px-2">search</span>
+                    <input id="search-input" type="text" placeholder="Pesquisar..." class="bg-transparent border-none text-sm w-full text-[var(--text-primary)] focus:ring-0 placeholder-[var(--text-secondary)] h-8">
+                </div>
+            </div>
+
+            <!-- Filtros -->
+            <div class="flex gap-2 px-3 pb-2 overflow-x-auto no-scrollbar border-b border-[var(--border-color)]">
+                <button class="px-3 py-1 rounded-full bg-[var(--header-bg)] text-[var(--text-secondary)] text-xs font-medium hover:bg-[var(--border-color)] transition hover:text-[var(--text-primary)]">Tudo</button>
+                <button class="px-3 py-1 rounded-full bg-[var(--header-bg)] text-[var(--text-secondary)] text-xs font-medium hover:bg-[var(--border-color)] transition hover:text-[var(--text-primary)]">Não lidas</button>
+                <button class="px-3 py-1 rounded-full bg-[var(--header-bg)] text-[var(--text-secondary)] text-xs font-medium hover:bg-[var(--border-color)] transition hover:text-[var(--text-primary)]">Grupos</button>
             </div>
 
             <div id="chat-list-container" class="flex-1 overflow-y-auto">
@@ -65,20 +84,20 @@
         <div id="chat-area" class="relative flex-1 h-full w-full absolute inset-0 md:relative translate-x-full md:translate-x-0 transition-transform duration-300 z-20 bg-[var(--app-bg)]">
             
             <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
-                <span class="material-symbols-outlined text-6xl mb-4" style="color: var(--primary-accent)">auto_stories</span>
-                <h2 class="text-xl font-bold mb-2">Selecione uma história</h2>
-                <p style="color: var(--text-secondary)">Life is Strange RPG Messenger</p>
+                <span class="material-symbols-outlined text-4xl mb-4 opacity-30" style="color: var(--text-secondary)">lock</span>
+                <h2 class="text-lg font-medium mb-2" style="color: var(--text-primary)">WhatsApp Web</h2>
+                <p class="text-sm" style="color: var(--text-secondary)">Envie e receba mensagens sem precisar conectar seu celular.</p>
             </div>
 
             <div id="chat-content" class="hidden flex-col h-full w-full relative z-10 bg-[var(--app-bg)]">
                 
-                <div class="h-16 flex items-center justify-between px-4 border-b border-gray-500/10 shrink-0 shadow-sm z-10 bg-[var(--app-bg)]">
+                <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-color)] shrink-0 z-10 bg-[var(--header-bg)]">
                     <div class="flex items-center gap-3">
                         <button id="back-btn" class="md:hidden material-symbols-outlined text-[var(--text-secondary)]">arrow_back</button>
                         <img id="chat-header-avatar" src="" class="w-10 h-10 rounded-full object-cover bg-gray-300 border border-gray-500/20">
-                        <div class="flex flex-col justify-center">
-                            <span id="chat-header-name" class="font-bold text-sm md:text-base">Nome</span>
-                            <span class="text-xs opacity-60">Online</span>
+                        <div class="flex flex-col justify-center cursor-pointer">
+                            <span id="chat-header-name" class="font-medium text-sm md:text-base text-[var(--text-primary)]">Nome</span>
+                            <span class="text-xs text-[var(--text-secondary)]">clique para dados do contato</span>
                         </div>
                     </div>
                 </div>
@@ -86,17 +105,17 @@
                 <div id="message-container" class="flex-1 w-full p-4 overflow-y-auto message-scroll flex flex-col gap-3">
                     </div>
 
-                <div class="px-4 py-3 shrink-0 z-20 border-t border-gray-500/10 bg-[var(--sidebar-bg)]">
-                    <div class="flex items-end gap-2 bg-[var(--app-bg)] p-2 rounded-2xl border border-gray-500/10 shadow-sm">
+                <div class="px-4 py-3 shrink-0 z-20 bg-[var(--header-bg)]">
+                    <div class="flex items-end gap-2 bg-[var(--sidebar-bg)] p-2 rounded-lg border border-transparent">
                         
                         <div class="relative group shrink-0 pb-0.5">
                             <img id="current-char-avatar" src="" class="w-9 h-9 rounded-full object-cover ring-2 ring-transparent group-hover:ring-[var(--primary-accent)] transition-all bg-gray-300">
                         </div>
 
-                        <textarea id="msg-input" rows="1" class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 px-2 text-sm leading-relaxed" placeholder="Escreva..."></textarea>
+                        <textarea id="msg-input" rows="1" class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 px-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder-[var(--text-secondary)]" placeholder="Mensagem"></textarea>
 
-                        <button id="send-btn" class="w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-sm" style="background-color: var(--primary-accent); color: white;">
-                            <span class="material-symbols-outlined text-[18px] ml-0.5">send</span>
+                        <button id="send-btn" class="w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0" style="color: var(--text-secondary);">
+                            <span class="material-symbols-outlined text-[24px]">send</span>
                         </button>
                     </div>
                 </div>

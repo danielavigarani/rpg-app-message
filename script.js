@@ -8,6 +8,11 @@ const PLAYER_PROFILE = {
 };
 
 const CHARACTERS = {
+    // --- COMO ADICIONAR NOVOS PERSONAGENS ---
+    // 1. Copie uma linha abaixo (ex: a do Warren).
+    // 2. Mude a chave (ex: 'nathan').
+    // 3. Mude o nome e o link do avatar.
+    // O sistema criará o chat automaticamente se ele não existir no banco.
     [PLAYER_PROFILE.id]: { name: PLAYER_PROFILE.name, avatar: PLAYER_PROFILE.avatar, side: "right" },
     chloe: { name: "Chloe", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", side: "left" },
     warren: { name: "Warren", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", side: "left" },
@@ -23,8 +28,9 @@ const chatContent = document.getElementById('chat-content');
 const emptyState = document.getElementById('empty-state');
 const chatArea = document.getElementById('chat-area');
 const sidebar = document.getElementById('sidebar');
-const profileScreen = document.getElementById('profile-selection-screen');
+const loginScreen = document.getElementById('login-screen');
 const logoutBtn = document.getElementById('logout-btn');
+const newChatModal = document.getElementById('new-chat-modal');
 
 let currentUserType = 'player'; // 'player' | 'gm'
 let currentChatId = null;
@@ -33,18 +39,42 @@ let unsubscribeMessages = null;
 
 // Inicialização
 async function init() {
+    await checkAndSeedAccessCodes();
     setupTheme();
     
     // Listeners
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            profileScreen.classList.remove('fade-out');
-            profileScreen.style.pointerEvents = 'auto';
+            loginScreen.classList.remove('fade-out');
+            loginScreen.style.display = 'flex';
+            loginScreen.style.pointerEvents = 'auto';
+            document.getElementById('access-code-input').value = '';
+            currentUserCode = null;
             currentUserType = null;
         });
     }
 
+    const loginInput = document.getElementById('access-code-input');
+    if(loginInput) {
+        loginInput.focus();
+        loginInput.addEventListener('input', (e) => {
+            if (e.target.value.length === 4) checkAccessCode(e.target.value);
+        });
+    }
+
+    // Funcionalidades da Sidebar
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    
+    // Modal Listeners
+    document.getElementById('new-chat-btn').addEventListener('click', openNewChatModal);
+    document.getElementById('cancel-modal-btn').addEventListener('click', closeNewChatModal);
+    document.getElementById('confirm-add-btn').addEventListener('click', addNewContact);
+    
+    // Expor switchTab globalmente
+    window.switchTab = switchTab;
+
+    document.getElementById('search-input').addEventListener('input', filterChats);
+
     document.getElementById('back-btn').addEventListener('click', closeChatMobile);
     document.getElementById('send-btn').addEventListener('click', sendMessage);
     
@@ -67,26 +97,60 @@ async function init() {
     loadChatList();
 }
 
+// --- SISTEMA DE LOGIN (Fase 11) ---
+async function checkAccessCode(code) {
+    const q = query(collection(db, "access_codes"), where("code", "==", code));
+    const snapshot = await getDocs(q);
+    const errorMsg = document.getElementById('login-error');
+    
+    if (!snapshot.empty) {
+        // Sucesso
+        const data = snapshot.docs[0].data();
+        currentUserCode = code; // Salva o código para usar nos participantes
+        selectPersona(data.type);
+        
+        loginScreen.classList.add('fade-out');
+        setTimeout(() => loginScreen.style.display = 'none', 500);
+    } else {
+        // Erro
+        errorMsg.style.opacity = '1';
+        document.getElementById('access-code-input').value = '';
+        setTimeout(() => errorMsg.style.opacity = '0', 2000);
+    }
+}
+
+async function checkAndSeedAccessCodes() {
+    const q = query(collection(db, "access_codes"));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+        await addDoc(collection(db, "access_codes"), {
+            code: '8579',
+            type: 'player',
+            name: PLAYER_PROFILE.name,
+            avatar: PLAYER_PROFILE.avatar
+        });
+        await addDoc(collection(db, "access_codes"), {
+            code: '0000',
+            type: 'gm',
+            name: 'Mestre'
+        });
+    }
+}
+
 // --- SISTEMA DE PERSONA (Fase 5) ---
 function selectPersona(type) {
     currentUserType = type;
-    
-    // Animação de saída
-    profileScreen.classList.add('fade-out');
-    profileScreen.style.pointerEvents = 'none';
 
     // Configurar Interface baseada no papel
     const sendBtn = document.getElementById('send-btn');
 
     if (type === 'player') {
         // Modo PLAYER
-        // Visual
-        sendBtn.style.backgroundColor = 'var(--primary-accent)'; // Laranja
+        sendBtn.style.color = 'var(--primary-accent)';
         document.getElementById('current-char-avatar').style.cursor = 'default';
     } else {
         // Modo MESTRE
-        // Visual
-        sendBtn.style.backgroundColor = '#a855f7';
+        sendBtn.style.color = '#a855f7';
         document.getElementById('current-char-avatar').style.cursor = 'default';
     }
 }
@@ -98,10 +162,13 @@ async function checkAndSeedChats() {
     if (snapshot.empty) {
         const seeds = [
             { id: 'chloe', name: 'Chloe Price', avatar: CHARACTERS.chloe.avatar, lastMessage: 'Ei, Max!', lastTime: new Date() },
-            { id: 'warren', name: 'Warren Graham', avatar: CHARACTERS.warren.avatar, lastMessage: '...', lastTime: new Date() }
+            { id: 'warren', name: 'Warren Graham', avatar: CHARACTERS.warren.avatar, lastMessage: '...', lastTime: new Date() },
+            { id: 'victoria', name: 'Victoria Chase', avatar: CHARACTERS.victoria.avatar, lastMessage: '...', lastTime: new Date() }
         ];
         for (const seed of seeds) {
             const { id, ...data } = seed;
+            // Adiciona participantes padrão (todos veem os seeds iniciais para teste, ou apenas GM)
+            data.participants = ['8579', '0000']; 
             await setDoc(doc(db, "chats", id), data);
         }
     }
@@ -109,7 +176,16 @@ async function checkAndSeedChats() {
 
 function loadChatList() {
     const container = document.getElementById('chat-list-container');
-    const q = query(collection(db, "chats"), orderBy("lastTime", "desc"));
+    
+    let q;
+    if (currentUserType === 'gm') {
+        // Mestre vê tudo
+        q = query(collection(db, "chats"), orderBy("lastTime", "desc"));
+    } else {
+        // Jogador vê apenas onde é participante
+        // Nota: Isso requer um índice composto no Firebase (participants + lastTime)
+        q = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode), orderBy("lastTime", "desc"));
+    }
     
     onSnapshot(q, (snapshot) => {
         container.innerHTML = '';
@@ -118,7 +194,7 @@ function loadChatList() {
             const chatId = docSnap.id;
             
             const el = document.createElement('div');
-            el.className = `chat-item flex items-center p-3 cursor-pointer border-b border-gray-500/10 transition-colors gap-3 ${currentChatId === chatId ? 'active' : ''}`;
+            el.className = `chat-item flex items-center p-3 cursor-pointer border-b border-[var(--border-color)] transition-colors gap-3 ${currentChatId === chatId ? 'bg-[var(--header-bg)]' : ''}`;
             el.onclick = () => openChat(chatId, chat);
             
             let timeStr = '';
@@ -139,6 +215,101 @@ function loadChatList() {
             `;
             container.appendChild(el);
         });
+    });
+}
+
+// --- MODAL & NOVO CONTATO ---
+function openNewChatModal() {
+    newChatModal.classList.remove('hidden');
+    // Pequeno delay para permitir a transição de opacidade
+    setTimeout(() => {
+        newChatModal.classList.remove('opacity-0');
+        newChatModal.firstElementChild.classList.remove('scale-90');
+        newChatModal.firstElementChild.classList.add('scale-100');
+    }, 10);
+    document.getElementById('npc-name-input').focus();
+}
+
+function closeNewChatModal() {
+    newChatModal.classList.add('opacity-0');
+    newChatModal.firstElementChild.classList.remove('scale-100');
+    newChatModal.firstElementChild.classList.add('scale-90');
+    setTimeout(() => {
+        newChatModal.classList.add('hidden');
+    }, 300);
+}
+
+function switchTab(tab) {
+    const btnNpc = document.getElementById('tab-npc');
+    const btnPlayer = document.getElementById('tab-player');
+    const inputNpc = document.getElementById('input-npc');
+    const inputPlayer = document.getElementById('input-player');
+
+    if (tab === 'npc') {
+        btnNpc.className = "flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition font-medium";
+        btnPlayer.className = "flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition font-medium";
+        inputNpc.classList.remove('hidden');
+        inputPlayer.classList.add('hidden');
+    } else {
+        btnPlayer.className = "flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition font-medium";
+        btnNpc.className = "flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition font-medium";
+        inputPlayer.classList.remove('hidden');
+        inputNpc.classList.add('hidden');
+    }
+}
+
+async function addNewContact() {
+    const isNpc = !document.getElementById('input-npc').classList.contains('hidden');
+    
+    if (isNpc) {
+        // MODO NPC
+        const name = document.getElementById('npc-name-input').value.trim();
+        if (!name) return;
+
+        await addDoc(collection(db, "chats"), {
+            name: name,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+            lastMessage: "Novo contato adicionado",
+            lastTime: serverTimestamp(),
+            participants: [currentUserCode, '0000'] // Eu + Mestre
+        });
+
+    } else {
+        // MODO JOGADOR
+        const code = document.getElementById('player-code-input').value.trim();
+        if (!code) return;
+
+        // Verificar se código existe
+        const q = query(collection(db, "access_codes"), where("code", "==", code));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+            const targetData = snapshot.docs[0].data();
+            await addDoc(collection(db, "chats"), {
+                name: targetData.name, // Nome do outro jogador
+                avatar: targetData.avatar,
+                lastMessage: "Conexão estabelecida",
+                lastTime: serverTimestamp(),
+                participants: [currentUserCode, code, '0000'] // Eu + Ele + Mestre
+            });
+        } else {
+            alert("Código de jogador não encontrado!");
+            return;
+        }
+    }
+    
+    // Limpar e fechar
+    document.getElementById('npc-name-input').value = '';
+    document.getElementById('player-code-input').value = '';
+    closeNewChatModal();
+}
+
+function filterChats(e) {
+    const term = e.target.value.toLowerCase();
+    const items = document.querySelectorAll('.chat-item');
+    items.forEach(item => {
+        const name = item.querySelector('h3').textContent.toLowerCase();
+        item.style.display = name.includes(term) ? 'flex' : 'none';
     });
 }
 
@@ -198,6 +369,7 @@ function loadMessages(chatId) {
 
     unsubscribeMessages = onSnapshot(q, (snapshot) => {
         messageContainer.innerHTML = '';
+        let lastDate = null;
         
         if(snapshot.empty) {
             console.log("Nenhuma mensagem encontrada para este chat.");
@@ -206,6 +378,28 @@ function loadMessages(chatId) {
 
         snapshot.forEach(docSnap => {
             const msg = docSnap.data();
+            
+            // Separadores de Data
+            if (msg.createdAt) {
+                const date = msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt);
+                const dateStr = date.toLocaleDateString();
+                
+                if (dateStr !== lastDate) {
+                    const divider = document.createElement('div');
+                    divider.className = 'date-divider';
+                    
+                    const today = new Date().toLocaleDateString();
+                    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString();
+                    
+                    if (dateStr === today) divider.textContent = "Hoje";
+                    else if (dateStr === yesterday) divider.textContent = "Ontem";
+                    else divider.textContent = dateStr;
+
+                    messageContainer.appendChild(divider);
+                    lastDate = dateStr;
+                }
+            }
+
             messageContainer.appendChild(createMessageElement(msg, docSnap.id));
         });
         
@@ -262,11 +456,24 @@ function createMessageElement(data, docId) {
     
     const bubbleClass = isPlayer ? 'bubble-right' : 'bubble-left';
 
+    // Detecção de Imagem (Polaroid)
+    const isImage = data.text.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i);
+    
+    let contentHtml;
+    if (isImage) {
+        contentHtml = `
+        <div class="p-2 bg-white shadow-md rotate-1 transform transition hover:rotate-0 hover:scale-105 duration-300 w-fit max-w-full rounded-sm mt-1 mb-1">
+            <img src="${data.text}" class="max-w-[200px] h-auto object-cover border border-gray-200 block" alt="Imagem">
+        </div>`;
+    } else {
+        contentHtml = `<div class="leading-relaxed whitespace-pre-wrap select-text">${data.text}</div>`;
+    }
+
     // REMOVER classes como 'text-gray-800' ou 'dark:text-gray-100' daqui!
     // Usar apenas cores herdadas do CSS.
     wrapper.innerHTML = `
         <div class="relative max-w-[85%] md:max-w-[65%] ${bubbleClass} px-3 py-2 text-sm shadow-sm group min-w-[80px]">
-            <div class="leading-relaxed whitespace-pre-wrap select-text">${data.text}</div>
+            ${contentHtml}
             <div class="flex justify-end items-center gap-1 mt-0.5 select-none opacity-70">
                 <span class="text-[10px] font-mono inherit-color">${timeStr}</span>
                 <button onclick="window.deleteMessage('${docId}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 ml-1 cursor-pointer" title="Apagar">
