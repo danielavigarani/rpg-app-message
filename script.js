@@ -35,11 +35,22 @@ const newChatModal = document.getElementById('new-chat-modal');
 let currentUserType = 'player'; // 'player' | 'gm'
 let currentChatId = null;
 let currentSenderId = null;
+let currentUserCode = null;
 let unsubscribeMessages = null;
+let unsubscribeChats = null;
 
 // Inicialização
 async function init() {
     await checkAndSeedAccessCodes();
+    
+    // Auto-Login (Persistência)
+    const savedCode = localStorage.getItem('rpg_access_code');
+    if (savedCode) {
+        checkAccessCode(savedCode, true);
+    } else {
+        loginScreen.style.display = 'flex';
+    }
+
     setupTheme();
     
     // Listeners
@@ -51,6 +62,7 @@ async function init() {
             document.getElementById('access-code-input').value = '';
             currentUserCode = null;
             currentUserType = null;
+            localStorage.removeItem('rpg_access_code'); // Limpar sessão
         });
     }
 
@@ -94,11 +106,10 @@ async function init() {
     window.selectPersona = selectPersona;
 
     await checkAndSeedChats();
-    loadChatList();
 }
 
 // --- SISTEMA DE LOGIN (Fase 11) ---
-async function checkAccessCode(code) {
+async function checkAccessCode(code, skipAnimation = false) {
     const q = query(collection(db, "access_codes"), where("code", "==", code));
     const snapshot = await getDocs(q);
     const errorMsg = document.getElementById('login-error');
@@ -108,13 +119,23 @@ async function checkAccessCode(code) {
         const data = snapshot.docs[0].data();
         currentUserCode = code; // Salva o código para usar nos participantes
         selectPersona(data.type);
+        localStorage.setItem('rpg_access_code', code); // Salvar sessão
         
-        loginScreen.classList.add('fade-out');
-        setTimeout(() => loginScreen.style.display = 'none', 500);
+        if (skipAnimation) {
+            loginScreen.style.display = 'none';
+        } else {
+            loginScreen.classList.add('fade-out');
+            setTimeout(() => loginScreen.style.display = 'none', 500);
+        }
+        loadChatList();
     } else {
         // Erro
+        const input = document.getElementById('access-code-input');
+        input.classList.add('shake');
+        setTimeout(() => input.classList.remove('shake'), 500);
+        
         errorMsg.style.opacity = '1';
-        document.getElementById('access-code-input').value = '';
+        input.value = '';
         setTimeout(() => errorMsg.style.opacity = '0', 2000);
     }
 }
@@ -175,6 +196,7 @@ async function checkAndSeedChats() {
 }
 
 function loadChatList() {
+    if (unsubscribeChats) unsubscribeChats();
     const container = document.getElementById('chat-list-container');
     
     let q;
@@ -187,7 +209,7 @@ function loadChatList() {
         q = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode), orderBy("lastTime", "desc"));
     }
     
-    onSnapshot(q, (snapshot) => {
+    unsubscribeChats = onSnapshot(q, (snapshot) => {
         container.innerHTML = '';
         snapshot.forEach(docSnap => {
             const chat = docSnap.data();
@@ -215,6 +237,11 @@ function loadChatList() {
             `;
             container.appendChild(el);
         });
+    }, (error) => {
+        console.error("Erro ao carregar chats:", error);
+        if (error.code === 'failed-precondition') {
+            alert("⚠️ ATENÇÃO MESTRE/DEV: O Firebase precisa de um Índice para esta consulta.\n\nAbra o Console do Navegador (F12), procure o link vermelho de erro do Firebase e clique nele para criar o índice automaticamente.");
+        }
     });
 }
 
@@ -246,13 +273,17 @@ function switchTab(tab) {
     const inputPlayer = document.getElementById('input-player');
 
     if (tab === 'npc') {
-        btnNpc.className = "flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition font-medium";
-        btnPlayer.className = "flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition font-medium";
+        btnNpc.style.backgroundColor = 'var(--primary-accent)';
+        btnNpc.style.color = 'var(--app-bg)';
+        btnPlayer.style.backgroundColor = 'transparent';
+        btnPlayer.style.color = 'var(--text-secondary)';
         inputNpc.classList.remove('hidden');
         inputPlayer.classList.add('hidden');
     } else {
-        btnPlayer.className = "flex-1 py-2 text-sm rounded-md bg-[#00a884] text-white transition font-medium";
-        btnNpc.className = "flex-1 py-2 text-sm rounded-md text-gray-400 hover:text-white transition font-medium";
+        btnPlayer.style.backgroundColor = 'var(--primary-accent)';
+        btnPlayer.style.color = 'var(--app-bg)';
+        btnNpc.style.backgroundColor = 'transparent';
+        btnNpc.style.color = 'var(--text-secondary)';
         inputPlayer.classList.remove('hidden');
         inputNpc.classList.add('hidden');
     }
