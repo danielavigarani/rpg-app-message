@@ -155,6 +155,12 @@ async function checkAndSeedAccessCodes() {
             type: 'gm',
             name: 'Mestre'
         });
+        await addDoc(collection(db, "access_codes"), {
+            code: '1111',
+            type: 'player',
+            name: 'Ale',
+            avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ale'
+        });
     }
 }
 
@@ -296,19 +302,39 @@ async function addNewContact() {
         // MODO NPC
         const name = document.getElementById('npc-name-input').value.trim();
         if (!name) return;
-
-        await addDoc(collection(db, "chats"), {
-            name: name,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-            lastMessage: "Novo contato adicionado",
-            lastTime: serverTimestamp(),
-            participants: [currentUserCode, '0000'] // Eu + Mestre
+        
+        // Verificar duplicidade (Nome)
+        const q = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode));
+        const snapshot = await getDocs(q);
+        let existingChat = null;
+        
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.name && data.name.toLowerCase() === name.toLowerCase()) {
+                existingChat = { id: doc.id, ...data };
+            }
         });
 
+        if (existingChat) {
+            openChat(existingChat.id, existingChat);
+        } else {
+            await addDoc(collection(db, "chats"), {
+                name: name,
+                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+                lastMessage: "Novo contato adicionado",
+                lastTime: serverTimestamp(),
+                participants: [currentUserCode, '0000'] // Eu + Mestre
+            });
+        }
     } else {
         // MODO JOGADOR
         const code = document.getElementById('player-code-input').value.trim();
         if (!code) return;
+
+        if (code === currentUserCode) {
+            alert("Você não pode adicionar a si mesmo.");
+            return;
+        }
 
         // Verificar se código existe
         const q = query(collection(db, "access_codes"), where("code", "==", code));
@@ -316,13 +342,30 @@ async function addNewContact() {
 
         if (!snapshot.empty) {
             const targetData = snapshot.docs[0].data();
-            await addDoc(collection(db, "chats"), {
-                name: targetData.name, // Nome do outro jogador
-                avatar: targetData.avatar,
-                lastMessage: "Conexão estabelecida",
-                lastTime: serverTimestamp(),
-                participants: [currentUserCode, code, '0000'] // Eu + Ele + Mestre
+            
+            // Verificar duplicidade (Participantes)
+            const qChats = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode));
+            const snapshotChats = await getDocs(qChats);
+            let existingChat = null;
+
+            snapshotChats.forEach(doc => {
+                const data = doc.data();
+                if (data.participants && data.participants.includes(code)) {
+                    existingChat = { id: doc.id, ...data };
+                }
             });
+
+            if (existingChat) {
+                openChat(existingChat.id, existingChat);
+            } else {
+                await addDoc(collection(db, "chats"), {
+                    name: targetData.name, // Nome do outro jogador
+                    avatar: targetData.avatar,
+                    lastMessage: "Conexão estabelecida",
+                    lastTime: serverTimestamp(),
+                    participants: [currentUserCode, code, '0000'] // Eu + Ele + Mestre
+                });
+            }
         } else {
             alert("Código de jogador não encontrado!");
             return;
@@ -366,7 +409,7 @@ function openChat(chatId, chatData) {
         currentSenderId = chatId;
         currentCharAvatar.src = chatData.avatar;
     } else {
-        currentSenderId = PLAYER_PROFILE.id;
+        currentSenderId = currentUserCode;
         currentCharAvatar.src = PLAYER_PROFILE.avatar;
     }
 
@@ -472,8 +515,14 @@ async function sendMessage() {
 function createMessageElement(data, docId) {
     const charConfig = CHARACTERS[data.characterId] || CHARACTERS['chloe'];
     
-    // REGRA DE OURO: Se o personagem for o Player, é Direita. Todos os outros são Esquerda.
-    const isPlayer = data.characterId === PLAYER_PROFILE.id;
+    // LÓGICA DE ALINHAMENTO (v17.0):
+    let isMe = false;
+
+    if (currentUserType === 'player') {
+        isMe = (data.characterId === currentUserCode);
+    } else {
+        isMe = (data.characterId === currentChatId);
+    }
     
     let timeStr = '';
     if (data.createdAt) {
@@ -483,9 +532,9 @@ function createMessageElement(data, docId) {
 
     const wrapper = document.createElement('div');
     // Flex direction column para alinhar corretamente
-    wrapper.className = `flex w-full mb-2 ${isPlayer ? 'justify-end' : 'justify-start'}`;
+    wrapper.className = `flex w-full mb-2 ${isMe ? 'justify-end' : 'justify-start'}`;
     
-    const bubbleClass = isPlayer ? 'bubble-right' : 'bubble-left';
+    const bubbleClass = isMe ? 'bubble-right' : 'bubble-left';
 
     // Detecção de Imagem (Polaroid)
     const isImage = data.text.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i);

@@ -1,68 +1,65 @@
-# 🦋 WhatsApp RPG - Guia de Correção de Fluxo v15.0
-
-## 🚨 DIAGNÓSTICO: A Lista Invisível
-**Problema:** Os chats existem no banco, mas não aparecem.
-**Causa:** A função `loadChatList()` é chamada apenas no início (`init`), quando o usuário ainda é "ninguém". Ao fazer login, ela não é chamada de novo, então a tela continua mostrando o resultado vazio inicial.
-**Solução:** Precisamos "reiniciar" a busca de chats sempre que o usuário fizer login ou trocar de conta.
+# 🦋 WhatsApp RPG - Guia de Identidade Real v17.0
+O foco é garantir que cada mensagem tenha o "DNA" (código) de quem enviou.
+## 🚨 DIAGNÓSTICO: Tudo à Direita
+**Problema:** Em conversas Jogador x Jogador, todas as mensagens aparecem no lado direito (enviadas), parecendo um monólogo.
+**Causa:** O sistema usa um ID genérico (`PLAYER_PROFILE.id`) para enviar mensagens de jogadores, em vez de usar o `currentUserCode` único de cada um.
 
 ---
 
 ## 🛠️ Instruções de Correção (`script.js`)
 
-### 1. Declaração de Variáveis (Correção de Erro)
-Adicionar `currentUserCode` e `unsubscribeChats` (para limpar a lista antiga antes de carregar a nova) no topo do arquivo.
+### 1. Corrigir quem envia (`openChat`)
+Quando um **Jogador** abre o chat, a variável `currentSenderId` deve receber o código dele, não o ID fixo da Max.
 
+**Lógica Nova:**
 ```javascript
-let currentUserCode = null; // <--- CRUCIAL
-let unsubscribeChats = null; // <--- Para reiniciar a lista
-// ... outras variáveis existentes
-
-2. Persistência de Login (Manter-se logado)
-
-No início da função init(), verificar se já existe um código salvo no navegador.
-
-// Dentro de init(), antes de tudo:
-const savedCode = localStorage.getItem('rpg_access_code');
-if (savedCode) {
-    // Se tem código salvo, loga direto
-    checkAccessCode(savedCode, true); // true = sem animação
+if (currentUserType === 'gm') {
+    currentSenderId = chatId; // GM vira o NPC
+    // ...
 } else {
-    // Se não, garante que a tela de login apareça
-    loginScreen.style.display = 'flex';
+    // PLAYER: Usa seu próprio código único (ex: '8579')
+    currentSenderId = currentUserCode; 
+    // Avatar continua sendo o do perfil
+    currentCharAvatar.src = PLAYER_PROFILE.avatar;
 }
 
-3. Função checkAccessCode (O Gatilho)
+2. Corrigir quem lê (createMessageElement)
 
-Ao logar com sucesso:
+A função precisa comparar o ID da mensagem com o ID do usuário logado para decidir o lado.
 
-    Salvar no localStorage.
+Lógica Nova:
 
-    CHAMAR loadChatList(). (Isso é o que faltava!)
+function createMessageElement(data, docId) {
+    // LÓGICA DE ALINHAMENTO:
+    let isMe = false;
 
-    4. Função loadChatList (Limpeza)
-
-Antes de criar um novo onSnapshot, precisamos desligar o anterior para não acumular buscas.
-
-function loadChatList() {
-    // 1. Desligar ouvinte anterior se existir
-    if (unsubscribeChats) {
-        unsubscribeChats();
+    if (currentUserType === 'player') {
+        // Sou Jogador: É minha se o ID da mensagem for igual ao meu Código
+        isMe = (data.characterId === currentUserCode);
+    } else {
+        // Sou Mestre: É minha se eu estiver interpretando esse NPC agora
+        // (Ou seja, se a mensagem veio do personagem dono deste chat)
+        isMe = (data.characterId === currentChatId);
     }
 
-    // 2. Definir Query
-    // ... lógica de query existente ...
-
-    // 3. Iniciar novo ouvinte e salvar na variável global
-    unsubscribeChats = onSnapshot(q, (snapshot) => {
-        // ... lógica de renderização existente ...
-    }, (error) => {
-        console.error("Erro na lista:", error);
-        // ... alerta de índice ...
-    });
+    // Define classes baseado no isMe (True = Direita, False = Esquerda)
+    const wrapperClass = `flex w-full mb-2 ${isMe ? 'justify-end' : 'justify-start'}`;
+    const bubbleClass = isMe ? 'bubble-right' : 'bubble-left';
+    
+    // ... resto do código (avatar, nome, etc)
 }
+3. Ajuste de Avatar (Fallback)
 
-### 💡 Dica Importante sobre o Firebase
+Como os códigos '8579' e '1111' não estão na lista CHARACTERS fixa, o avatar pode quebrar. Adicionar lógica para usar um avatar padrão se o personagem não for encontrado na lista fixa.
 
-Além dessa correção no código, lembre-se do **Índice**.
-Se você logar e a lista continuar vazia, **abra o Console (F12)**. Se tiver um erro vermelho lá com um link, **clique nele**.
-O Firebase exige isso quando usamos filtros complexos (`array-contains` + `orderBy`). Sem criar esse índice (clicando no link), o banco bloqueia a busca!
+
+### 🧪 Como testar a correção:
+
+1.  Abra a aba da **Dani (8579)** e a aba do **Ale (1111)**.
+2.  Na aba da Dani, mande: *"Oi Ale, sou eu a Dani!"*.
+    * Na tela da Dani: Deve aparecer na **Direita** (Laranja/Verde).
+3.  Olhe na aba do Ale.
+    * A mensagem da Dani deve aparecer na **Esquerda** (Branco/Cinza).
+4.  Responda com o Ale: *"Oi Dani!"*.
+    * Na tela do Ale: **Direita**.
+    * Na tela da Dani: **Esquerda**.
