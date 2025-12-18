@@ -203,3 +203,10 @@ body.dark-theme .chat-item:hover {
 .shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
 }
+
+/* Scrollbar Customizada para Lista de Contatos */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { 
+    background-color: var(--text-secondary); 
+    border-radius: 4px; 
+}

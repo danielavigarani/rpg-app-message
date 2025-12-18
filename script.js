@@ -1,4 +1,4 @@
-import { db, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp } from "./firebase.js";
+import { db, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp, getDoc } from "./firebase.js";
 
 // --- CONFIGURAÇÃO ---
 const PLAYER_PROFILE = {
@@ -7,18 +7,7 @@ const PLAYER_PROFILE = {
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max&hairColor=4a312c"
 };
 
-const CHARACTERS = {
-    // --- COMO ADICIONAR NOVOS PERSONAGENS ---
-    // 1. Copie uma linha abaixo (ex: a do Warren).
-    // 2. Mude a chave (ex: 'nathan').
-    // 3. Mude o nome e o link do avatar.
-    // O sistema criará o chat automaticamente se ele não existir no banco.
-    [PLAYER_PROFILE.id]: { name: PLAYER_PROFILE.name, avatar: PLAYER_PROFILE.avatar, side: "right" },
-    chloe: { name: "Chloe", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", side: "left" },
-    warren: { name: "Warren", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", side: "left" },
-    victoria: { name: "Victoria", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", side: "left" },
-    wells: { name: "Diretor Wells", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Wells&facialHair=mustache", side: "left" }
-};
+const characterCache = {}; // Cache local para evitar leituras repetidas no Firestore
 
 // Elementos
 const messageContainer = document.getElementById('message-container');
@@ -42,6 +31,7 @@ let unsubscribeChats = null;
 // Inicialização
 async function init() {
     await checkAndSeedAccessCodes();
+    await checkAndSeedGlobalNPCs(); // Seed da Agenda Global
     
     // Auto-Login (Persistência)
     const savedCode = localStorage.getItem('rpg_access_code');
@@ -79,11 +69,11 @@ async function init() {
     
     // Modal Listeners
     document.getElementById('new-chat-btn').addEventListener('click', openNewChatModal);
-    document.getElementById('cancel-modal-btn').addEventListener('click', closeNewChatModal);
-    document.getElementById('confirm-add-btn').addEventListener('click', addNewContact);
+    document.getElementById('close-modal-btn').addEventListener('click', closeNewChatModal);
     
-    // Expor switchTab globalmente
-    window.switchTab = switchTab;
+    document.getElementById('contact-search').addEventListener('input', (e) => {
+        renderContactList(e.target.value);
+    });
 
     document.getElementById('search-input').addEventListener('input', filterChats);
 
@@ -110,33 +100,45 @@ async function init() {
 
 // --- SISTEMA DE LOGIN (Fase 11) ---
 async function checkAccessCode(code, skipAnimation = false) {
-    const q = query(collection(db, "access_codes"), where("code", "==", code));
-    const snapshot = await getDocs(q);
+    console.log("Tentando logar com código:", code); // Debug
     const errorMsg = document.getElementById('login-error');
     
-    if (!snapshot.empty) {
-        // Sucesso
-        const data = snapshot.docs[0].data();
-        currentUserCode = code; // Salva o código para usar nos participantes
-        selectPersona(data.type);
-        localStorage.setItem('rpg_access_code', code); // Salvar sessão
+    try {
+        // Consulta ao Firebase
+        const q = query(collection(db, "access_codes"), where("code", "==", code));
+        const snapshot = await getDocs(q);
         
-        if (skipAnimation) {
-            loginScreen.style.display = 'none';
+        console.log("Resposta do Firebase recebida. Vazio?", snapshot.empty); // Debug
+
+        if (!snapshot.empty) {
+            // SUCESSO
+            const data = snapshot.docs[0].data();
+            currentUserCode = code;
+            selectPersona(data.type);
+            localStorage.setItem('rpg_access_code', code);
+            
+            if (skipAnimation) {
+                loginScreen.style.display = 'none';
+            } else {
+                loginScreen.classList.add('fade-out');
+                setTimeout(() => loginScreen.style.display = 'none', 500);
+            }
+            loadChatList();
         } else {
-            loginScreen.classList.add('fade-out');
-            setTimeout(() => loginScreen.style.display = 'none', 500);
+            // SENHA ERRADA
+            console.warn("Código não encontrado no banco.");
+            const input = document.getElementById('access-code-input');
+            input.classList.add('shake');
+            setTimeout(() => input.classList.remove('shake'), 500);
+            
+            errorMsg.style.opacity = '1';
+            input.value = '';
+            setTimeout(() => errorMsg.style.opacity = '0', 2000);
         }
-        loadChatList();
-    } else {
-        // Erro
-        const input = document.getElementById('access-code-input');
-        input.classList.add('shake');
-        setTimeout(() => input.classList.remove('shake'), 500);
-        
-        errorMsg.style.opacity = '1';
-        input.value = '';
-        setTimeout(() => errorMsg.style.opacity = '0', 2000);
+    } catch (error) {
+        // ERRO TÉCNICO (Internet, Permissão, Config)
+        console.error("ERRO FATAL NO LOGIN:", error);
+        alert("Erro ao conectar no banco de dados. Verifique o console (F12) para detalhes.\nErro: " + error.message);
     }
 }
 
@@ -164,6 +166,54 @@ async function checkAndSeedAccessCodes() {
     }
 }
 
+async function checkAndSeedGlobalNPCs() {
+    const q = query(collection(db, "global_npcs"));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+        const initialNPCs = [
+            { id: 'chloe', name: "Chloe Price", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", type: 'npc' },
+            { id: 'warren', name: "Warren Graham", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", type: 'npc' },
+            { id: 'victoria', name: "Victoria Chase", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", type: 'npc' },
+            { id: 'wells', name: "Diretor Wells", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Wells&facialHair=mustache", type: 'npc' }
+        ];
+
+        for (const npc of initialNPCs) {
+            await setDoc(doc(db, "global_npcs", npc.id), npc);
+        }
+    }
+}
+
+// --- HELPER: RESOLVER DADOS DE PERSONAGEM (Fase Refinamento) ---
+async function resolveCharacterData(id) {
+    // 1. Verifica Cache
+    if (characterCache[id]) return characterCache[id];
+
+    // 2. Verifica Global NPCs
+    const npcDoc = await getDoc(doc(db, "global_npcs", id));
+    if (npcDoc.exists()) {
+        const data = npcDoc.data();
+        characterCache[id] = data;
+        return data;
+    }
+
+    // 3. Verifica Access Codes (Players)
+    const q = query(collection(db, "access_codes"), where("code", "==", id));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+        const data = snapshot.docs[0].data();
+        characterCache[id] = data;
+        return data;
+    }
+
+    // 4. Fallback (Desconhecido)
+    return { 
+        name: "Desconhecido", 
+        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Unknown",
+        type: 'unknown'
+    };
+}
+
 // --- SISTEMA DE PERSONA (Fase 5) ---
 function selectPersona(type) {
     currentUserType = type;
@@ -188,9 +238,9 @@ async function checkAndSeedChats() {
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
         const seeds = [
-            { id: 'chloe', name: 'Chloe Price', avatar: CHARACTERS.chloe.avatar, lastMessage: 'Ei, Max!', lastTime: new Date() },
-            { id: 'warren', name: 'Warren Graham', avatar: CHARACTERS.warren.avatar, lastMessage: '...', lastTime: new Date() },
-            { id: 'victoria', name: 'Victoria Chase', avatar: CHARACTERS.victoria.avatar, lastMessage: '...', lastTime: new Date() }
+            { id: 'chloe', name: 'Chloe Price', avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Chloe&hairColor=2c1b18&top=longHair", lastMessage: 'Ei, Max!', lastTime: new Date() },
+            { id: 'warren', name: 'Warren Graham', avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Warren", lastMessage: '...', lastTime: new Date() },
+            { id: 'victoria', name: 'Victoria Chase', avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Victoria&hairColor=fdd835", lastMessage: '...', lastTime: new Date() }
         ];
         for (const seed of seeds) {
             const { id, ...data } = seed;
@@ -252,7 +302,7 @@ function loadChatList() {
 }
 
 // --- MODAL & NOVO CONTATO ---
-function openNewChatModal() {
+async function openNewChatModal() {
     newChatModal.classList.remove('hidden');
     // Pequeno delay para permitir a transição de opacidade
     setTimeout(() => {
@@ -260,7 +310,8 @@ function openNewChatModal() {
         newChatModal.firstElementChild.classList.remove('scale-90');
         newChatModal.firstElementChild.classList.add('scale-100');
     }, 10);
-    document.getElementById('npc-name-input').focus();
+    
+    await renderContactList();
 }
 
 function closeNewChatModal() {
@@ -272,109 +323,86 @@ function closeNewChatModal() {
     }, 300);
 }
 
-function switchTab(tab) {
-    const btnNpc = document.getElementById('tab-npc');
-    const btnPlayer = document.getElementById('tab-player');
-    const inputNpc = document.getElementById('input-npc');
-    const inputPlayer = document.getElementById('input-player');
+let allContactsCache = [];
 
-    if (tab === 'npc') {
-        btnNpc.style.backgroundColor = 'var(--primary-accent)';
-        btnNpc.style.color = 'var(--app-bg)';
-        btnPlayer.style.backgroundColor = 'transparent';
-        btnPlayer.style.color = 'var(--text-secondary)';
-        inputNpc.classList.remove('hidden');
-        inputPlayer.classList.add('hidden');
-    } else {
-        btnPlayer.style.backgroundColor = 'var(--primary-accent)';
-        btnPlayer.style.color = 'var(--app-bg)';
-        btnNpc.style.backgroundColor = 'transparent';
-        btnNpc.style.color = 'var(--text-secondary)';
-        inputPlayer.classList.remove('hidden');
-        inputNpc.classList.add('hidden');
-    }
-}
-
-async function addNewContact() {
-    const isNpc = !document.getElementById('input-npc').classList.contains('hidden');
+async function renderContactList(filter = "") {
+    const container = document.getElementById('contacts-list');
     
-    if (isNpc) {
-        // MODO NPC
-        const name = document.getElementById('npc-name-input').value.trim();
-        if (!name) return;
+    // Se cache vazio, busca dados
+    if (allContactsCache.length === 0) {
+        const npcsSnap = await getDocs(collection(db, "global_npcs"));
+        const playersSnap = await getDocs(collection(db, "access_codes"));
         
-        // Verificar duplicidade (Nome)
-        const q = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode));
-        const snapshot = await getDocs(q);
-        let existingChat = null;
-        
-        snapshot.forEach(doc => {
+        npcsSnap.forEach(doc => allContactsCache.push({ ...doc.data(), id: doc.id, isPlayer: false }));
+        playersSnap.forEach(doc => {
             const data = doc.data();
-            if (data.name && data.name.toLowerCase() === name.toLowerCase()) {
-                existingChat = { id: doc.id, ...data };
+            if (data.type === 'player') {
+                allContactsCache.push({ ...data, id: data.code, isPlayer: true });
             }
         });
+    }
 
-        if (existingChat) {
-            openChat(existingChat.id, existingChat);
-        } else {
-            await addDoc(collection(db, "chats"), {
-                name: name,
-                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-                lastMessage: "Novo contato adicionado",
-                lastTime: serverTimestamp(),
-                participants: [currentUserCode, '0000'] // Eu + Mestre
-            });
-        }
-    } else {
-        // MODO JOGADOR
-        const code = document.getElementById('player-code-input').value.trim();
-        if (!code) return;
+    container.innerHTML = '';
+    
+    const filtered = allContactsCache.filter(c => 
+        c.name.toLowerCase().includes(filter.toLowerCase()) && 
+        c.id !== currentUserCode // Não mostrar a si mesmo
+    );
 
-        if (code === currentUserCode) {
-            alert("Você não pode adicionar a si mesmo.");
-            return;
-        }
+    filtered.forEach(contact => {
+        const div = document.createElement('div');
+        div.className = "flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-black/5 transition";
+        div.onclick = () => handleContactSelection(contact);
+        
+        div.innerHTML = `
+            <img src="${contact.avatar}" class="w-10 h-10 rounded-full object-cover bg-gray-300">
+            <div class="flex-1">
+                <h4 class="font-bold text-sm" style="color: var(--text-primary)">${contact.name}</h4>
+                <span class="text-xs opacity-60" style="color: var(--text-secondary)">${contact.isPlayer ? 'Jogador' : 'NPC'}</span>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
 
-        // Verificar se código existe
-        const q = query(collection(db, "access_codes"), where("code", "==", code));
-        const snapshot = await getDocs(q);
+async function handleContactSelection(contact) {
+    // 1. Verificar se chat já existe
+    const q = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode));
+    const snapshot = await getDocs(q);
+    let existingChat = null;
 
-        if (!snapshot.empty) {
-            const targetData = snapshot.docs[0].data();
-            
-            // Verificar duplicidade (Participantes)
-            const qChats = query(collection(db, "chats"), where("participants", "array-contains", currentUserCode));
-            const snapshotChats = await getDocs(qChats);
-            let existingChat = null;
-
-            snapshotChats.forEach(doc => {
-                const data = doc.data();
-                if (data.participants && data.participants.includes(code)) {
-                    existingChat = { id: doc.id, ...data };
-                }
-            });
-
-            if (existingChat) {
-                openChat(existingChat.id, existingChat);
-            } else {
-                await addDoc(collection(db, "chats"), {
-                    name: targetData.name, // Nome do outro jogador
-                    avatar: targetData.avatar,
-                    lastMessage: "Conexão estabelecida",
-                    lastTime: serverTimestamp(),
-                    participants: [currentUserCode, code, '0000'] // Eu + Ele + Mestre
-                });
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        // Se for NPC, verifica pelo nome (ou ID se tivéssemos migrado tudo para ID)
+        // Se for Player, verifica se o código dele está nos participantes
+        if (contact.isPlayer) {
+            if (data.participants && data.participants.includes(contact.id)) {
+                existingChat = { id: doc.id, ...data };
             }
         } else {
-            alert("Código de jogador não encontrado!");
-            return;
+            // Para NPCs, a lógica ideal seria ID, mas mantendo compatibilidade com nomes antigos:
+            if (data.name === contact.name) {
+                existingChat = { id: doc.id, ...data };
+            }
         }
+    });
+
+    if (existingChat) {
+        openChat(existingChat.id, existingChat);
+    } else {
+        // 2. Criar novo chat
+        const newChatData = {
+            name: contact.name,
+            avatar: contact.avatar,
+            lastMessage: "Nova conversa iniciada",
+            lastTime: serverTimestamp(),
+            participants: [currentUserCode, '0000'] // Eu + Mestre
+        };
+        if (contact.isPlayer) newChatData.participants.push(contact.id); // Adiciona o outro jogador
+
+        const docRef = await addDoc(collection(db, "chats"), newChatData);
+        openChat(docRef.id, newChatData);
     }
-    
-    // Limpar e fechar
-    document.getElementById('npc-name-input').value = '';
-    document.getElementById('player-code-input').value = '';
     closeNewChatModal();
 }
 
@@ -513,8 +541,6 @@ async function sendMessage() {
 }
 
 function createMessageElement(data, docId) {
-    const charConfig = CHARACTERS[data.characterId] || CHARACTERS['chloe'];
-    
     // LÓGICA DE ALINHAMENTO (v17.0):
     let isMe = false;
 

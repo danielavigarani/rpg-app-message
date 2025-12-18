@@ -26,23 +26,18 @@
     <!-- MODAL NOVO CONTATO (FASE 13) -->
     <div id="new-chat-modal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
         <div class="p-6 rounded-2xl w-96 transform scale-90 transition-transform duration-300 shadow-2xl border" style="background-color: var(--sidebar-bg); border-color: var(--primary-accent);">
-            <h2 class="text-xl font-bold mb-4 text-center" style="color: var(--text-primary)">Novo Contato</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold" style="color: var(--text-primary)">Nova Conversa</h2>
+                <button id="close-modal-btn" class="material-symbols-outlined hover:opacity-70 transition" style="color: var(--text-secondary)">close</button>
+            </div>
             
-            <div class="flex gap-2 mb-4 p-1 rounded-lg" style="background-color: var(--app-bg)">
-                <button id="tab-npc" onclick="switchTab('npc')" class="flex-1 py-2 text-sm rounded-md transition font-medium" style="background-color: var(--primary-accent); color: var(--app-bg)">NPC</button>
-                <button id="tab-player" onclick="switchTab('player')" class="flex-1 py-2 text-sm rounded-md transition font-medium" style="color: var(--text-secondary)">Outro Jogador</button>
+            <div class="mb-4">
+                <input type="text" id="contact-search" placeholder="Buscar contato..." class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
             </div>
 
-            <div id="input-npc">
-                <input type="text" id="npc-name-input" placeholder="Nome do Personagem (ex: Nathan)" class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
-            </div>
-            <div id="input-player" class="hidden">
-                <input type="text" id="player-code-input" placeholder="Código do Jogador (ex: 1234)" class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
-            </div>
-
-            <div class="flex justify-end gap-3 mt-6">
-                <button id="cancel-modal-btn" class="px-4 py-2 rounded-lg font-bold text-sm transition hover:opacity-80" style="color: var(--primary-accent)">Cancelar</button>
-                <button id="confirm-add-btn" class="px-6 py-2 rounded-lg font-bold shadow-lg text-sm transition hover:opacity-90" style="background-color: var(--primary-accent); color: var(--app-bg)">Adicionar</button>
+            <div id="contacts-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                <!-- Lista injetada via JS -->
+                <div class="text-center py-4 opacity-50 text-sm" style="color: var(--text-secondary)">Carregando contatos...</div>
             </div>
         </div>
     </div>

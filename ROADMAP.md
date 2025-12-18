@@ -1,65 +1,19 @@
-# 🦋 WhatsApp RPG - Guia de Identidade Real v17.0
-O foco é garantir que cada mensagem tenha o "DNA" (código) de quem enviou.
-## 🚨 DIAGNÓSTICO: Tudo à Direita
-**Problema:** Em conversas Jogador x Jogador, todas as mensagens aparecem no lado direito (enviadas), parecendo um monólogo.
-**Causa:** O sistema usa um ID genérico (`PLAYER_PROFILE.id`) para enviar mensagens de jogadores, em vez de usar o `currentUserCode` único de cada um.
-
 ---
 
-## 🛠️ Instruções de Correção (`script.js`)
+## 🛡️ 4. Robustez e Feedback de Sistema (Prioridade Imediata)
+**Problema:** O login e o envio de mensagens podem "congelar" a tela se a internet oscilar ou o Firebase demorar, sem dar feedback ao usuário.
+**Solução:** Implementar estados de carregamento (Loading States) e tratamento de erros.
 
-### 1. Corrigir quem envia (`openChat`)
-Quando um **Jogador** abre o chat, a variável `currentSenderId` deve receber o código dele, não o ID fixo da Max.
+### A. Feedback Visual de Login
+* **Tarefa:** Modificar a tela de login. Quando o usuário digitar o 4º dígito:
+    1.  Trocar o campo de input por um ícone de "Spinner" (girando) ou o texto "Conectando...".
+    2.  Bloquear a edição do input.
+    3.  Se der erro, restaurar o input e vibrar (animação shake).
 
-**Lógica Nova:**
-```javascript
-if (currentUserType === 'gm') {
-    currentSenderId = chatId; // GM vira o NPC
-    // ...
-} else {
-    // PLAYER: Usa seu próprio código único (ex: '8579')
-    currentSenderId = currentUserCode; 
-    // Avatar continua sendo o do perfil
-    currentCharAvatar.src = PLAYER_PROFILE.avatar;
-}
+### B. Tratamento de Erros Global (Try/Catch)
+* **Tarefa:** Envolver todas as chamadas assíncronas (`getDocs`, `addDoc`, `updateDoc`) em blocos `try...catch`.
+* **Feedback:** Se uma mensagem falhar ao enviar, mostrar um ícone de exclamação vermelha ❗ ao lado dela com a opção de "Tentar novamente".
 
-2. Corrigir quem lê (createMessageElement)
-
-A função precisa comparar o ID da mensagem com o ID do usuário logado para decidir o lado.
-
-Lógica Nova:
-
-function createMessageElement(data, docId) {
-    // LÓGICA DE ALINHAMENTO:
-    let isMe = false;
-
-    if (currentUserType === 'player') {
-        // Sou Jogador: É minha se o ID da mensagem for igual ao meu Código
-        isMe = (data.characterId === currentUserCode);
-    } else {
-        // Sou Mestre: É minha se eu estiver interpretando esse NPC agora
-        // (Ou seja, se a mensagem veio do personagem dono deste chat)
-        isMe = (data.characterId === currentChatId);
-    }
-
-    // Define classes baseado no isMe (True = Direita, False = Esquerda)
-    const wrapperClass = `flex w-full mb-2 ${isMe ? 'justify-end' : 'justify-start'}`;
-    const bubbleClass = isMe ? 'bubble-right' : 'bubble-left';
-    
-    // ... resto do código (avatar, nome, etc)
-}
-3. Ajuste de Avatar (Fallback)
-
-Como os códigos '8579' e '1111' não estão na lista CHARACTERS fixa, o avatar pode quebrar. Adicionar lógica para usar um avatar padrão se o personagem não for encontrado na lista fixa.
-
-
-### 🧪 Como testar a correção:
-
-1.  Abra a aba da **Dani (8579)** e a aba do **Ale (1111)**.
-2.  Na aba da Dani, mande: *"Oi Ale, sou eu a Dani!"*.
-    * Na tela da Dani: Deve aparecer na **Direita** (Laranja/Verde).
-3.  Olhe na aba do Ale.
-    * A mensagem da Dani deve aparecer na **Esquerda** (Branco/Cinza).
-4.  Responda com o Ale: *"Oi Dani!"*.
-    * Na tela do Ale: **Direita**.
-    * Na tela da Dani: **Esquerda**.
+### C. Verificação de Conexão
+* **Tarefa:** Usar a funcionalidade `.info/connected` do Firebase para detectar se o usuário caiu.
+* **UI:** Mostrar uma barra discreta no topo "Você está offline" se a conexão cair.
