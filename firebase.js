@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, collection, addDoc, onSnapshot, query, orderBy, 
-    deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp 
+    deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp, 
+    getDoc // <--- ADICIONADO AQUI
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // COLE SUA CONFIGURAÇÃO DO FIREBASE AQUI
@@ -19,5 +20,6 @@ const db = getFirestore(app);
 
 export { 
     db, collection, addDoc, onSnapshot, query, orderBy, 
-    deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp 
+    deleteDoc, doc, where, setDoc, getDocs, updateDoc, serverTimestamp,
+    getDoc // <--- E ADICIONADO AQUI
 };

@@ -27,6 +27,7 @@ let currentSenderId = null;
 let currentUserCode = null;
 let unsubscribeMessages = null;
 let unsubscribeChats = null;
+let newCharType = 'npc'; // Controle do formulário de criação
 
 // Inicialização
 async function init() {
@@ -46,10 +47,25 @@ async function init() {
     // Listeners
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
+            // 1. Resetar Visual do Login (CRUCIAL)
+            const input = document.getElementById('access-code-input');
+            const spinner = document.getElementById('login-spinner');
+            const loginTitle = document.querySelector('#login-screen h1');
+            
+            // Força o estado inicial
+            if(input) {
+                input.classList.remove('hidden');
+                input.value = '';
+            }
+            if(spinner) spinner.classList.add('hidden');
+            if(loginTitle) loginTitle.classList.remove('hidden');
+
+            // 2. Mostrar a tela
             loginScreen.classList.remove('fade-out');
             loginScreen.style.display = 'flex';
             loginScreen.style.pointerEvents = 'auto';
-            document.getElementById('access-code-input').value = '';
+            
+            // 3. Limpar Sessão
             currentUserCode = null;
             currentUserType = null;
             localStorage.removeItem('rpg_access_code'); // Limpar sessão
@@ -70,6 +86,31 @@ async function init() {
     // Modal Listeners
     document.getElementById('new-chat-btn').addEventListener('click', openNewChatModal);
     document.getElementById('close-modal-btn').addEventListener('click', closeNewChatModal);
+    
+    // NOVOS LISTENERS (Fase 5 - Híbrido)
+    document.getElementById('btn-show-create').addEventListener('click', () => {
+        document.getElementById('contacts-view').classList.add('hidden');
+        document.getElementById('create-character-view').classList.remove('hidden');
+        document.getElementById('modal-title').textContent = "Criar Personagem";
+    });
+
+    document.getElementById('btn-cancel-create').addEventListener('click', () => {
+        document.getElementById('create-character-view').classList.add('hidden');
+        document.getElementById('contacts-view').classList.remove('hidden');
+        document.getElementById('modal-title').textContent = "Nova Conversa";
+    });
+
+    document.getElementById('type-npc').addEventListener('click', () => {
+        newCharType = 'npc';
+        updateTypeButtons();
+    });
+
+    document.getElementById('type-player').addEventListener('click', () => {
+        newCharType = 'player';
+        updateTypeButtons();
+    });
+
+    document.getElementById('btn-confirm-create').addEventListener('click', createNewCharacter);
     
     document.getElementById('contact-search').addEventListener('input', (e) => {
         renderContactList(e.target.value);
@@ -102,6 +143,13 @@ async function init() {
 async function checkAccessCode(code, skipAnimation = false) {
     console.log("Tentando logar com código:", code); // Debug
     const errorMsg = document.getElementById('login-error');
+    const input = document.getElementById('access-code-input');
+    const spinner = document.getElementById('login-spinner');
+
+    // UI Loading State
+    input.classList.add('hidden');
+    spinner.classList.remove('hidden');
+    errorMsg.style.opacity = '0';
     
     try {
         // Consulta ao Firebase
@@ -127,7 +175,12 @@ async function checkAccessCode(code, skipAnimation = false) {
         } else {
             // SENHA ERRADA
             console.warn("Código não encontrado no banco.");
-            const input = document.getElementById('access-code-input');
+            
+            // Restore UI
+            spinner.classList.add('hidden');
+            input.classList.remove('hidden');
+            input.focus();
+
             input.classList.add('shake');
             setTimeout(() => input.classList.remove('shake'), 500);
             
@@ -138,6 +191,8 @@ async function checkAccessCode(code, skipAnimation = false) {
     } catch (error) {
         // ERRO TÉCNICO (Internet, Permissão, Config)
         console.error("ERRO FATAL NO LOGIN:", error);
+        spinner.classList.add('hidden');
+        input.classList.remove('hidden');
         alert("Erro ao conectar no banco de dados. Verifique o console (F12) para detalhes.\nErro: " + error.message);
     }
 }
@@ -271,6 +326,15 @@ function loadChatList() {
             const chat = docSnap.data();
             const chatId = docSnap.id;
             
+            // --- CORREÇÃO DE IDENTIDADE (Bug 1) ---
+            let displayName = chat.name;
+            if (currentUserType === 'player') {
+                const otherParticipants = (chat.participants || []).filter(p => p !== currentUserCode && p !== '0000');
+                if (otherParticipants.length === 0) {
+                    displayName = 'Mestre';
+                }
+            }
+
             const el = document.createElement('div');
             el.className = `chat-item flex items-center p-3 cursor-pointer border-b border-[var(--border-color)] transition-colors gap-3 ${currentChatId === chatId ? 'bg-[var(--header-bg)]' : ''}`;
             el.onclick = () => openChat(chatId, chat);
@@ -285,7 +349,7 @@ function loadChatList() {
                 <img src="${chat.avatar}" class="w-12 h-12 rounded-full object-cover bg-gray-300">
                 <div class="flex-1 min-w-0">
                     <div class="flex justify-between items-baseline">
-                        <h3 class="font-bold text-sm truncate" style="color: var(--text-primary)">${chat.name}</h3>
+                        <h3 class="font-bold text-sm truncate" style="color: var(--text-primary)">${displayName}</h3>
                         <span class="text-xs opacity-60 font-mono">${timeStr}</span>
                     </div>
                     <p class="text-xs opacity-80 truncate" style="color: var(--text-secondary)">${chat.lastMessage || '...'}</p>
@@ -304,6 +368,11 @@ function loadChatList() {
 // --- MODAL & NOVO CONTATO ---
 async function openNewChatModal() {
     newChatModal.classList.remove('hidden');
+    // Reset View
+    document.getElementById('contacts-view').classList.remove('hidden');
+    document.getElementById('create-character-view').classList.add('hidden');
+    document.getElementById('modal-title').textContent = "Nova Conversa";
+
     // Pequeno delay para permitir a transição de opacidade
     setTimeout(() => {
         newChatModal.classList.remove('opacity-0');
@@ -321,6 +390,85 @@ function closeNewChatModal() {
     setTimeout(() => {
         newChatModal.classList.add('hidden');
     }, 300);
+}
+
+function updateTypeButtons() {
+    const btnNpc = document.getElementById('type-npc');
+    const btnPlayer = document.getElementById('type-player');
+    const inputCode = document.getElementById('new-char-code');
+
+    if (newCharType === 'npc') {
+        btnNpc.style.backgroundColor = 'var(--primary-accent)';
+        btnNpc.style.color = 'var(--app-bg)';
+        btnPlayer.style.backgroundColor = 'transparent';
+        btnPlayer.style.color = 'var(--text-secondary)';
+        inputCode.classList.add('hidden');
+    } else {
+        btnPlayer.style.backgroundColor = 'var(--primary-accent)';
+        btnPlayer.style.color = 'var(--app-bg)';
+        btnNpc.style.backgroundColor = 'transparent';
+        btnNpc.style.color = 'var(--text-secondary)';
+        inputCode.classList.remove('hidden');
+    }
+}
+
+async function createNewCharacter() {
+    const name = document.getElementById('new-char-name').value.trim();
+    const code = document.getElementById('new-char-code').value.trim();
+    
+    if (!name) return alert("Nome é obrigatório");
+    if (newCharType === 'player' && (!code || code.length !== 4)) return alert("Código de 4 dígitos obrigatório para jogadores");
+
+    const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+    const btn = document.getElementById('btn-confirm-create');
+    const originalText = btn.textContent;
+    btn.textContent = "Criando...";
+    btn.disabled = true;
+
+    try {
+        let newId;
+        if (newCharType === 'npc') {
+            const docRef = await addDoc(collection(db, "global_npcs"), {
+                name,
+                avatar,
+                type: 'npc'
+            });
+            newId = docRef.id;
+        } else {
+            // Check if code exists
+             const q = query(collection(db, "access_codes"), where("code", "==", code));
+             const snap = await getDocs(q);
+             if (!snap.empty) {
+                 alert("Este código já está em uso!");
+                 btn.textContent = originalText;
+                 btn.disabled = false;
+                 return;
+             }
+
+            await addDoc(collection(db, "access_codes"), {
+                name,
+                avatar,
+                code,
+                type: 'player'
+            });
+            newId = code;
+        }
+
+        const contactData = { id: newId, name, avatar, isPlayer: (newCharType === 'player') };
+        allContactsCache.push(contactData); // Atualiza cache local
+        await handleContactSelection(contactData); // Abre o chat
+        
+        // Limpa campos
+        document.getElementById('new-char-name').value = '';
+        document.getElementById('new-char-code').value = '';
+        
+    } catch (error) {
+        console.error("Erro ao criar:", error);
+        alert("Erro ao criar personagem: " + error.message);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
 }
 
 let allContactsCache = [];
@@ -524,8 +672,8 @@ async function sendMessage() {
     // 1. Salva a mensagem
     await addDoc(collection(db, "messages"), {
         text, 
-        characterId: currentSenderId, 
-        chatId: currentChatId, 
+        characterId: String(currentSenderId).trim(), // Garante string limpa (Bug 2)
+        chatId: String(currentChatId).trim(),        // Garante string limpa (Bug 2)
         createdAt: serverTimestamp()
     });
 

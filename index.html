@@ -19,6 +19,7 @@
         <div class="w-full max-w-xs text-center">
             <h1 class="text-white text-2xl mb-8 font-light tracking-widest opacity-80">WHATSAPP RPG</h1>
             <input type="tel" id="access-code-input" class="bg-transparent border-b border-gray-700 text-center text-white text-4xl tracking-[0.5em] w-full py-2 focus:outline-none focus:border-[#00a884] transition-colors placeholder-gray-800 font-mono" placeholder="••••" maxlength="4" autocomplete="off">
+            <div id="login-spinner" class="hidden w-12 h-12 border-4 border-gray-600 border-t-[#00a884] rounded-full animate-spin mx-auto my-2"></div>
             <p id="login-error" class="text-red-500 text-sm mt-4 opacity-0 transition-opacity font-mono">Código de acesso inválido</p>
         </div>
     </div>
@@ -27,17 +28,43 @@
     <div id="new-chat-modal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
         <div class="p-6 rounded-2xl w-96 transform scale-90 transition-transform duration-300 shadow-2xl border" style="background-color: var(--sidebar-bg); border-color: var(--primary-accent);">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold" style="color: var(--text-primary)">Nova Conversa</h2>
+                <h2 id="modal-title" class="text-xl font-bold" style="color: var(--text-primary)">Nova Conversa</h2>
                 <button id="close-modal-btn" class="material-symbols-outlined hover:opacity-70 transition" style="color: var(--text-secondary)">close</button>
             </div>
             
-            <div class="mb-4">
-                <input type="text" id="contact-search" placeholder="Buscar contato..." class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
+            <!-- VIEW 1: LISTA DE CONTATOS -->
+            <div id="contacts-view">
+                <div class="mb-4">
+                    <input type="text" id="contact-search" placeholder="Buscar contato..." class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
+                </div>
+
+                <div id="contacts-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar mb-4">
+                    <!-- Lista injetada via JS -->
+                    <div class="text-center py-4 opacity-50 text-sm" style="color: var(--text-secondary)">Carregando contatos...</div>
+                </div>
+
+                <button id="btn-show-create" class="w-full py-2 rounded-lg font-bold text-sm transition hover:opacity-90 flex items-center justify-center gap-2" style="background-color: var(--primary-accent); color: var(--app-bg)">
+                    <span class="material-symbols-outlined text-sm">add</span> Criar Novo Personagem
+                </button>
             </div>
 
-            <div id="contacts-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                <!-- Lista injetada via JS -->
-                <div class="text-center py-4 opacity-50 text-sm" style="color: var(--text-secondary)">Carregando contatos...</div>
+            <!-- VIEW 2: FORMULÁRIO DE CRIAÇÃO -->
+            <div id="create-character-view" class="hidden">
+                <div class="flex flex-col gap-3">
+                    <input type="text" id="new-char-name" placeholder="Nome do Personagem" class="w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)">
+                    
+                    <div class="flex gap-2 p-1 rounded-lg" style="background-color: var(--app-bg)">
+                        <button id="type-npc" class="flex-1 py-2 text-sm rounded-md transition font-medium" style="background-color: var(--primary-accent); color: var(--app-bg)">NPC</button>
+                        <button id="type-player" class="flex-1 py-2 text-sm rounded-md transition font-medium" style="color: var(--text-secondary)">Jogador</button>
+                    </div>
+
+                    <input type="text" id="new-char-code" placeholder="Código de Acesso (4 dígitos)" class="hidden w-full p-3 rounded-lg border-none outline-none focus:ring-1 focus:ring-[var(--primary-accent)] placeholder-[var(--text-secondary)]" style="background-color: var(--app-bg); color: var(--text-primary)" maxlength="4">
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button id="btn-cancel-create" class="px-4 py-2 rounded-lg font-bold text-sm transition hover:opacity-80" style="color: var(--primary-accent)">Voltar</button>
+                    <button id="btn-confirm-create" class="px-6 py-2 rounded-lg font-bold shadow-lg text-sm transition hover:opacity-90" style="background-color: var(--primary-accent); color: var(--app-bg)">Criar</button>
+                </div>
             </div>
         </div>
     </div>
